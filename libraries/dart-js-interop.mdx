@@ -1,0 +1,575 @@
+---
+title: dart:js_interop
+description: JavaScript interoperability for Dart web and Wasm applications
+---
+
+The `dart:js_interop` library enables Dart programs to interact with JavaScript code and browser APIs. It provides a type-safe way to call JavaScript functions, access JavaScript objects, and export Dart functions to JavaScript.
+
+## Overview
+
+To use this library in your code:
+
+```dart
+import 'dart:js_interop';
+```
+
+The dart:js_interop library includes:
+- **JS Types** - JSObject, JSArray, JSPromise, JSFunction, etc.
+- **Primitive Types** - JSNumber, JSString, JSBoolean
+- **Type Conversions** - Convert between Dart and JS types
+- **Annotations** - @JS, @staticInterop, @anonymous
+- **Exports** - Export Dart code to JavaScript
+- **Typed Arrays** - JSArrayBuffer, JSInt8Array, JSFloat64Array, etc.
+
+<Info>
+This library works with both JavaScript (dart2js, DDC) and WebAssembly (dart2wasm) compilation targets, providing a unified API for JavaScript interop.
+</Info>
+
+## Basic JavaScript Interop
+
+### Calling JavaScript Functions
+
+```dart
+import 'dart:js_interop';
+
+@JS()
+external void alert(String message);
+
+@JS('console.log')
+external void consoleLog(String message);
+
+void main() {
+  alert('Hello from Dart!');
+  consoleLog('This is a log message');
+}
+```
+
+### Accessing JavaScript Objects
+
+```dart
+import 'dart:js_interop';
+
+// Define an interop interface for a JavaScript API
+@JS()
+extension type Window(JSObject _) implements JSObject {
+  external Document get document;
+  external void alert(String message);
+  external JSPromise fetch(String url);
+}
+
+@JS()
+extension type Document(JSObject _) implements JSObject {
+  external Element? getElementById(String id);
+  external String get title;
+  external set title(String value);
+}
+
+@JS()
+extension type Element(JSObject _) implements JSObject {
+  external String get textContent;
+  external set textContent(String value);
+}
+
+// Use the API
+void updatePage() {
+  var window = globalContext['window'] as Window;
+  window.document.title = 'My Dart App';
+  
+  var element = window.document.getElementById('content');
+  if (element != null) {
+    element.textContent = 'Updated from Dart!';
+  }
+}
+```
+
+## JS Type Hierarchy
+
+### JSAny and Core Types
+
+<ParamField path="JSAny" type="extension type">
+  The top type for all non-null JavaScript values. JSAny? includes null and undefined.
+</ParamField>
+
+<ParamField path="JSObject" type="extension type">
+  Represents JavaScript objects. The representation type for most interop extension types.
+</ParamField>
+
+```dart
+import 'dart:js_interop';
+
+// Create JavaScript objects
+var obj = JSObject();
+print(obj); // Empty JS object
+
+// Check types
+void processValue(JSAny value) {
+  if (value.isA<JSString>()) {
+    print('It\'s a string');
+  } else if (value.isA<JSNumber>()) {
+    print('It\'s a number');
+  } else if (value.isA<JSObject>()) {
+    print('It\'s an object');
+  }
+}
+```
+
+### JavaScript Primitives
+
+<Accordion title="JavaScript Primitive Types">
+
+<ParamField path="JSNumber" type="extension type">
+  JavaScript number (both integers and floating-point).
+</ParamField>
+
+<ParamField path="JSBoolean" type="extension type">
+  JavaScript boolean (true or false).
+</ParamField>
+
+<ParamField path="JSString" type="extension type">
+  JavaScript string.
+</ParamField>
+
+```dart
+import 'dart:js_interop';
+
+// Convert Dart primitives to JS
+var jsNum = 42.toJS;           // JSNumber
+var jsStr = 'Hello'.toJS;      // JSString
+var jsBool = true.toJS;        // JSBoolean
+
+// Convert JS primitives to Dart
+var dartNum = jsNum.toDartInt;    // int
+var dartStr = jsStr.toDart;       // String
+var dartBool = jsBool.toDart;     // bool
+
+// Nullable conversions
+JSNumber? nullableNum = null;
+int? dartInt = nullableNum?.toDartInt; // null
+```
+
+</Accordion>
+
+## JSArray
+
+### Working with JavaScript Arrays
+
+<ParamField path="JSArray<T>" type="extension type">
+  A JavaScript Array. Provides indexed access and array methods.
+</ParamField>
+
+```dart
+import 'dart:js_interop';
+
+// Create JavaScript arrays
+var empty = JSArray<JSNumber>();
+var withLength = JSArray<JSString>.withLength(5);
+
+// Add elements
+empty.add(1.toJS);
+empty.add(2.toJS);
+empty.add(3.toJS);
+
+print(empty.length); // 3
+
+// Access elements
+var first = empty[0];  // JSNumber
+var dartFirst = first.toDartInt; // 1
+
+// Modify elements
+empty[0] = 10.toJS;
+
+// Convert from Dart List
+var dartList = [1, 2, 3, 4, 5];
+var jsArray = dartList.map((n) => n.toJS).toList().toJS;
+
+// Convert to Dart List
+List<int> backToDart = [];
+for (var i = 0; i < jsArray.length; i++) {
+  backToDart.add(jsArray[i].toDartInt);
+}
+```
+
+## JSPromise and Futures
+
+### Converting Between Promise and Future
+
+<ParamField path="JSPromise<T>" type="extension type">
+  A JavaScript Promise. Can be converted to and from Dart Future.
+</ParamField>
+
+```dart
+import 'dart:js_interop';
+
+// JavaScript Promise to Dart Future
+@JS()
+external JSPromise<JSString> fetchData(String url);
+
+Future<String> getData(String url) async {
+  var promise = fetchData(url);
+  var jsResult = await promise.toDart;
+  return jsResult.toDart;
+}
+
+// Dart Future to JavaScript Promise
+Future<String> processData(String input) async {
+  await Future.delayed(Duration(seconds: 1));
+  return 'Processed: $input';
+}
+
+@JS()
+external void setHandler(JSPromise<JSString> Function(JSString) handler);
+
+void setupHandler() {
+  setHandler((JSString input) {
+    var dartInput = input.toDart;
+    return processData(dartInput)
+      .then((result) => result.toJS.toJS);
+  }.toJS);
+}
+```
+
+<Accordion title="Promise Error Handling">
+
+```dart
+import 'dart:js_interop';
+
+// Handle promise rejection
+Future<void> fetchWithErrorHandling() async {
+  try {
+    var promise = fetchData('https://api.example.com/data');
+    var result = await promise.toDart;
+    print(result.toDart);
+  } on NullRejectionException catch (e) {
+    print('Promise rejected with null/undefined');
+  } catch (e) {
+    print('Promise rejected: $e');
+  }
+}
+```
+
+</Accordion>
+
+## Exporting Dart to JavaScript
+
+### Using @JSExport
+
+<ParamField path="@JSExport" type="annotation">
+  Marks Dart classes and methods for export to JavaScript.
+</ParamField>
+
+```dart
+import 'dart:js_interop';
+
+@JSExport()
+class Calculator {
+  int _value = 0;
+  
+  @JSExport()
+  void add(int n) {
+    _value += n;
+  }
+  
+  @JSExport()
+  void subtract(int n) {
+    _value -= n;
+  }
+  
+  @JSExport('getValue')
+  int get value => _value;
+  
+  @JSExport()
+  void reset() {
+    _value = 0;
+  }
+}
+
+// Export instance to JavaScript
+void setupCalculator() {
+  var calc = Calculator();
+  var jsCalc = createJSInteropWrapper(calc);
+  globalContext['calculator'] = jsCalc;
+}
+
+// Now accessible from JavaScript:
+// calculator.add(5);
+// calculator.subtract(2);
+// console.log(calculator.getValue()); // 3
+```
+
+### Converting Dart Functions to JS
+
+```dart
+import 'dart:js_interop';
+
+// Simple function export
+String greet(String name) => 'Hello, $name!';
+
+void exportGreeting() {
+  globalContext['greet'] = greet.toJS;
+}
+
+// Function with callback
+void setTimeout(void Function() callback, int milliseconds) {
+  // Calls JavaScript setTimeout
+  globalContext.callMethod('setTimeout'.toJS, [
+    callback.toJS,
+    milliseconds.toJS,
+  ]);
+}
+
+// Capture 'this' context
+void setupClickHandler() {
+  void handleClick(JSObject thisArg, JSObject event) {
+    print('Clicked on: $thisArg');
+  }
+  
+  var jsHandler = handleClick.toJSCaptureThis;
+  globalContext['handleClick'] = jsHandler;
+}
+```
+
+## Typed Arrays
+
+### Working with Binary Data
+
+<Accordion title="Typed Array Types">
+
+<ParamField path="JSArrayBuffer" type="extension type">
+  JavaScript ArrayBuffer for raw binary data.
+</ParamField>
+
+<ParamField path="JSInt8Array, JSUint8Array, etc." type="extension types">
+  Typed array views for different numeric types.
+</ParamField>
+
+```dart
+import 'dart:js_interop';
+import 'dart:typed_data';
+
+// Create ArrayBuffer
+var buffer = JSArrayBuffer(16); // 16 bytes
+
+// Create typed array views
+var int8View = JSInt8Array(buffer);
+var uint8View = JSUint8Array(buffer);
+var float64View = JSFloat64Array(buffer);
+
+// Initialize with length
+var bytes = JSUint8Array.withLength(10);
+for (var i = 0; i < bytes.length; i++) {
+  bytes[i] = i.toJS;
+}
+
+// Convert between Dart and JS typed arrays
+var dartBytes = Uint8List.fromList([1, 2, 3, 4, 5]);
+var jsBytes = dartBytes.toJS;
+
+var backToDart = jsBytes.toDart;
+print(backToDart); // [1, 2, 3, 4, 5]
+```
+
+</Accordion>
+
+## Annotations
+
+### @JS Annotation
+
+<ParamField path="@JS" type="annotation">
+  Marks a declaration as a JavaScript interop declaration. Can specify custom JS name.
+</ParamField>
+
+```dart
+import 'dart:js_interop';
+
+// Top-level function with JS name
+@JS('console.log')
+external void log(String message);
+
+// Class with different JS name
+@JS('MyJavaScriptClass')
+extension type MyClass(JSObject _) implements JSObject {
+  external factory MyClass();
+  external void method();
+}
+
+// Library-level prefix
+@JS('myLibrary')
+library;
+
+import 'dart:js_interop';
+
+// All members prefixed with 'myLibrary.'
+@JS()
+external void initialize();
+// Calls: myLibrary.initialize()
+```
+
+### @staticInterop and @anonymous
+
+<Accordion title="Legacy Interop Annotations">
+
+<ParamField path="@staticInterop" type="annotation">
+  Marks a class for static interop (legacy pattern).
+</ParamField>
+
+<ParamField path="@anonymous" type="annotation">
+  Creates JavaScript object literals from factory constructors.
+</ParamField>
+
+```dart
+import 'dart:js_interop';
+
+// Create object literals
+@JS()
+@anonymous
+extension type Options(JSObject _) implements JSObject {
+  external factory Options({
+    String? name,
+    int? age,
+    bool? active,
+  });
+}
+
+// Usage
+var options = Options(
+  name: 'Alice',
+  age: 30,
+  active: true,
+);
+// Creates: { name: 'Alice', age: 30, active: true }
+```
+
+</Accordion>
+
+## Type Conversions
+
+### Converting Between Dart and JavaScript
+
+```dart
+import 'dart:js_interop';
+
+// Primitives
+var dartInt = 42;
+var jsNum = dartInt.toJS;          // int -> JSNumber
+var backToInt = jsNum.toDartInt;   // JSNumber -> int
+
+var dartDouble = 3.14;
+var jsDouble = dartDouble.toJS;           // double -> JSNumber
+var backToDouble = jsDouble.toDartDouble; // JSNumber -> double
+
+var dartString = 'Hello';
+var jsString = dartString.toJS;    // String -> JSString
+var backToString = jsString.toDart; // JSString -> String
+
+var dartBool = true;
+var jsBool = dartBool.toJS;        // bool -> JSBoolean
+var backToBool = jsBool.toDart;    // JSBoolean -> bool
+
+// Collections
+var dartList = [1, 2, 3];
+var jsList = dartList.map((n) => n.toJS).toList().toJS;
+
+var dartMap = {'a': 1, 'b': 2};
+var jsObj = dartMap.jsify(); // Object? -> JSAny?
+
+// Reverse
+var jsData = jsObj;
+var dartData = jsData?.dartify(); // JSAny? -> Object?
+```
+
+### Using jsify and dartify
+
+<Accordion title="Deep Conversion Utilities">
+
+```dart
+import 'dart:js_interop';
+
+// Convert complex Dart structures to JS
+var complexData = {
+  'name': 'Alice',
+  'scores': [95, 87, 92],
+  'metadata': {
+    'created': '2026-03-03',
+    'active': true,
+  },
+};
+
+var jsData = complexData.jsify();
+// Recursively converts to JS objects/arrays
+
+// Convert back to Dart
+var dartData = jsData?.dartify() as Map<String, dynamic>?;
+print(dartData?['name']); // Alice
+print(dartData?['scores']); // [95, 87, 92]
+```
+
+</Accordion>
+
+## Best Practices
+
+<Warning>
+1. **Don't use `is` checks with JS types** - Use `isA<T>()` instead
+2. **Use `==` not `identical`** for JS value comparison
+3. **Handle null and undefined** - JavaScript has both, Dart only has null
+4. **Be careful with type safety** - JS types are only static guarantees
+5. **Don't rely on runtime types** - They differ between JS and Wasm backends
+</Warning>
+
+<Tip>
+**Prefer extension types over @staticInterop classes** for new code. Extension types provide better type safety and are the recommended pattern for dart:js_interop.
+</Tip>
+
+## Common Patterns
+
+```dart
+import 'dart:js_interop';
+
+// Check for undefined vs null
+void handleNullish(JSAny? value) {
+  if (value == null) {
+    print('Value is null or undefined');
+  } else if (value.isUndefinedOrNull) {
+    print('Value is nullish');
+  } else if (value.isDefinedAndNotNull) {
+    print('Value exists');
+  }
+}
+
+// Type checking
+void processUnknown(JSAny value) {
+  if (value.typeofEquals('string')) {
+    var str = value as JSString;
+    print('String: ${str.toDart}');
+  } else if (value.typeofEquals('number')) {
+    var num = value as JSNumber;
+    print('Number: ${num.toDartDouble}');
+  }
+}
+
+// Instance checking
+void checkInstance(JSAny value) {
+  if (value.instanceOfString('Array')) {
+    print('It\'s an array');
+  } else if (value.instanceOfString('Date')) {
+    print('It\'s a date');
+  }
+}
+
+// Safe property access
+extension SafeAccess on JSObject {
+  JSAny? getProperty(String name) {
+    try {
+      return this[name];
+    } catch (e) {
+      return null;
+    }
+  }
+}
+```
+
+## Related Resources
+
+- [JavaScript Interop](https://dart.dev/interop/js-interop) - Official documentation
+- [JS Interop Usage](https://dart.dev/interop/js-interop/usage) - Usage guide
+- [Web Platform Libraries](https://dart.dev/libraries/dart-html) - Browser APIs
+- [package:web](https://pub.dev/packages/web) - Typed web APIs

@@ -1,0 +1,492 @@
+---
+title: dart:math
+description: Mathematical constants, functions, random number generation, and geometric types
+---
+
+The `dart:math` library provides mathematical constants, functions, random number generation, and geometric utility classes for 2D points and rectangles.
+
+## Overview
+
+To use this library in your code:
+
+```dart
+import 'dart:math';
+```
+
+The dart:math library includes:
+- **Constants** - e, pi, ln2, ln10, sqrt2
+- **Functions** - min, max, sin, cos, tan, sqrt, pow, log
+- **Random** - Random number generator
+- **Point** - 2D point representation
+- **Rectangle** - 2D rectangle representation
+
+## Mathematical Constants
+
+```dart
+import 'dart:math';
+
+print(e);       // 2.718281828459045 (Euler's number)
+print(pi);      // 3.1415926535897932
+print(ln10);    // 2.302585092994046 (natural log of 10)
+print(ln2);     // 0.6931471805599453 (natural log of 2)
+print(log2e);   // 1.4426950408889634 (log base 2 of e)
+print(log10e);  // 0.4342944819032518 (log base 10 of e)
+print(sqrt1_2); // 0.7071067811865476 (square root of 1/2)
+print(sqrt2);   // 1.4142135623730951 (square root of 2)
+```
+
+## Mathematical Functions
+
+### Basic Functions
+
+```dart
+import 'dart:math';
+
+// Min and max
+print(min(5, 10));      // 5
+print(max(5, 10));      // 10
+print(min(3.14, 2.71)); // 2.71
+
+// Power and square root
+print(pow(2, 8));       // 256 (2^8)
+print(pow(3, 3));       // 27 (3^3)
+print(sqrt(16));        // 4.0
+print(sqrt(2));         // 1.4142135623730951
+
+// Logarithms
+print(log(e));          // 1.0 (natural log)
+print(log(10));         // 2.302585092994046
+print(exp(1));          // 2.718281828459045 (e^1)
+print(exp(2));          // 7.38905609893065 (e^2)
+```
+
+### Trigonometric Functions
+
+<Accordion title="Trigonometry Functions">
+
+```dart
+import 'dart:math';
+
+// Sine, cosine, tangent (input in radians)
+print(sin(0));          // 0.0
+print(sin(pi / 2));     // 1.0
+print(cos(0));          // 1.0
+print(cos(pi));         // -1.0
+print(tan(0));          // 0.0
+print(tan(pi / 4));     // 1.0
+
+// Inverse trigonometric functions
+print(asin(1));         // 1.5707963267948966 (π/2)
+print(acos(0));         // 1.5707963267948966 (π/2)
+print(atan(1));         // 0.7853981633974483 (π/4)
+
+// Two-argument arctangent
+print(atan2(1, 1));     // 0.7853981633974483 (π/4)
+print(atan2(1, 0));     // 1.5707963267948966 (π/2)
+print(atan2(-1, 0));    // -1.5707963267948966 (-π/2)
+
+// Convert degrees to radians and vice versa
+double degreesToRadians(num degrees) => degrees * (pi / 180);
+double radiansToDegrees(num radians) => radians * (180 / pi);
+
+print(degreesToRadians(90));  // 1.5707963267948966
+print(radiansToDegrees(pi));  // 180.0
+
+// Example: calculate distance using trigonometry
+double calculateDistance(double angle, double hypotenuse) {
+  return hypotenuse * cos(degreesToRadians(angle));
+}
+```
+
+</Accordion>
+
+## Random Number Generation
+
+### Random Class
+
+<ParamField path="Random" type="class">
+  A generator of random boolean, integer, and double values.
+</ParamField>
+
+```dart
+import 'dart:math';
+
+// Create random number generator
+var random = Random();
+
+// Generate random integers
+var dice = random.nextInt(6) + 1;  // 1-6 (dice roll)
+var percent = random.nextInt(101); // 0-100
+var index = random.nextInt(10);    // 0-9
+
+print('Rolled: $dice');
+print('Percent: $percent%');
+
+// Generate random doubles (0.0 <= x < 1.0)
+var fraction = random.nextDouble();
+print(fraction); // e.g., 0.7234567
+
+// Random in range
+double randomInRange(double min, double max) {
+  return min + random.nextDouble() * (max - min);
+}
+
+var temp = randomInRange(15.0, 30.0); // Temperature between 15-30°C
+print('Temperature: ${temp.toStringAsFixed(1)}°C');
+
+// Generate random booleans
+var coinFlip = random.nextBool();
+print(coinFlip ? 'Heads' : 'Tails');
+```
+
+### Seeded Random
+
+```dart
+import 'dart:math';
+
+// Create random with seed for reproducible sequences
+var seeded1 = Random(42);
+var seeded2 = Random(42);
+
+// Both generate same sequence
+print(seeded1.nextInt(100)); // Same as seeded2.nextInt(100)
+print(seeded2.nextInt(100)); // Same value as above
+
+// Useful for testing
+void testWithSeed(int seed) {
+  var random = Random(seed);
+  // Reproducible test behavior
+}
+```
+
+### Random Utilities
+
+<Accordion title="Random Helper Functions">
+
+```dart
+import 'dart:math';
+
+final random = Random();
+
+// Random element from list
+T randomElement<T>(List<T> list) {
+  return list[random.nextInt(list.length)];
+}
+
+var colors = ['red', 'green', 'blue', 'yellow'];
+print(randomElement(colors)); // Random color
+
+// Shuffle list (Fisher-Yates algorithm)
+void shuffle<T>(List<T> list) {
+  for (var i = list.length - 1; i > 0; i--) {
+    var j = random.nextInt(i + 1);
+    var temp = list[i];
+    list[i] = list[j];
+    list[j] = temp;
+  }
+}
+
+var deck = List.generate(52, (i) => i);
+shuffle(deck);
+print('Shuffled deck: $deck');
+
+// Random string
+String randomString(int length) {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  return List.generate(length, (_) => randomElement(chars.split(''))).join();
+}
+
+print(randomString(8)); // e.g., 'x3k9m2qp'
+
+// Random color (hex)
+String randomHexColor() {
+  return '#${random.nextInt(0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
+}
+
+print(randomHexColor()); // e.g., '#3a7f2c'
+
+// Weighted random selection
+T weightedRandom<T>(Map<T, int> weights) {
+  var totalWeight = weights.values.reduce((a, b) => a + b);
+  var randomValue = random.nextInt(totalWeight);
+  
+  var currentWeight = 0;
+  for (var entry in weights.entries) {
+    currentWeight += entry.value;
+    if (randomValue < currentWeight) {
+      return entry.key;
+    }
+  }
+  return weights.keys.first;
+}
+
+var items = {'common': 70, 'rare': 25, 'legendary': 5};
+print(weightedRandom(items)); // More likely to be 'common'
+```
+
+</Accordion>
+
+## Point
+
+### Point Class
+
+<ParamField path="Point<T>" type="class">
+  A 2D point with x and y coordinates. Generic type T is typically num, int, or double.
+</ParamField>
+
+```dart
+import 'dart:math';
+
+// Create points
+var origin = Point(0, 0);
+var p1 = Point(3, 4);
+var p2 = Point(6, 8);
+
+// Access coordinates
+print('x: ${p1.x}, y: ${p1.y}'); // x: 3, y: 4
+
+// Calculate distance between points
+var distance = p1.distanceTo(p2);
+print('Distance: $distance'); // 5.0
+
+// Distance to origin
+var magnitude = p1.distanceTo(origin);
+print('Magnitude: $magnitude'); // 5.0
+
+// Squared distance (faster, no sqrt)
+var squaredDist = p1.squaredDistanceTo(p2);
+print('Squared distance: $squaredDist'); // 25
+
+// Point arithmetic
+var sum = Point(p1.x + p2.x, p1.y + p2.y);
+var diff = Point(p1.x - p2.x, p1.y - p2.y);
+
+print('Sum: $sum');   // Point(9, 12)
+print('Diff: $diff'); // Point(-3, -4)
+```
+
+### Point Operations
+
+```dart
+import 'dart:math';
+
+// Midpoint
+Point<double> midpoint(Point a, Point b) {
+  return Point((a.x + b.x) / 2, (a.y + b.y) / 2);
+}
+
+var p1 = Point(0, 0);
+var p2 = Point(10, 10);
+print(midpoint(p1, p2)); // Point(5.0, 5.0)
+
+// Scale point
+Point<double> scale(Point p, double factor) {
+  return Point(p.x * factor, p.y * factor);
+}
+
+var p = Point(3, 4);
+print(scale(p, 2.0)); // Point(6.0, 8.0)
+
+// Rotate point around origin
+Point<double> rotate(Point p, double angleRadians) {
+  var cos = cos(angleRadians);
+  var sin = sin(angleRadians);
+  return Point(
+    p.x * cos - p.y * sin,
+    p.x * sin + p.y * cos,
+  );
+}
+
+var point = Point(1, 0);
+var rotated = rotate(point, pi / 2); // Rotate 90 degrees
+print(rotated); // Point(0.0, 1.0)
+```
+
+## Rectangle
+
+### Rectangle Class
+
+<ParamField path="Rectangle<T>" type="class">
+  An immutable 2D axis-aligned rectangle. Defined by left, top, width, and height.
+</ParamField>
+
+```dart
+import 'dart:math';
+
+// Create rectangles
+var rect1 = Rectangle(10, 20, 100, 50);
+// left=10, top=20, width=100, height=50
+
+var rect2 = Rectangle.fromPoints(
+  Point(0, 0),
+  Point(100, 100),
+);
+
+// Access properties
+print('Left: ${rect1.left}');     // 10
+print('Top: ${rect1.top}');       // 20
+print('Width: ${rect1.width}');   // 100
+print('Height: ${rect1.height}'); // 50
+print('Right: ${rect1.right}');   // 110 (left + width)
+print('Bottom: ${rect1.bottom}'); // 70 (top + height)
+
+// Derived properties
+print('Top-left: ${rect1.topLeft}');         // Point(10, 20)
+print('Top-right: ${rect1.topRight}');       // Point(110, 20)
+print('Bottom-left: ${rect1.bottomLeft}');   // Point(10, 70)
+print('Bottom-right: ${rect1.bottomRight}'); // Point(110, 70)
+```
+
+### Rectangle Operations
+
+<Accordion title="Rectangle Methods">
+
+```dart
+import 'dart:math';
+
+var rect1 = Rectangle(0, 0, 100, 100);
+var rect2 = Rectangle(50, 50, 100, 100);
+
+// Check if point is inside
+var point = Point(75, 75);
+print(rect1.containsPoint(point)); // true
+
+var outside = Point(200, 200);
+print(rect1.containsPoint(outside)); // false
+
+// Check if rectangle contains another
+var small = Rectangle(25, 25, 50, 50);
+print(rect1.containsRectangle(small)); // true
+print(small.containsRectangle(rect1)); // false
+
+// Intersection
+var intersection = rect1.intersection(rect2);
+print(intersection); // Rectangle (50, 50) 50 x 50
+
+if (intersection != null) {
+  print('Rectangles intersect');
+}
+
+// Check for intersection
+print(rect1.intersects(rect2)); // true
+
+var separate = Rectangle(200, 200, 50, 50);
+print(rect1.intersects(separate)); // false
+
+// Bounding box (union)
+var boundingBox = rect1.boundingBox(rect2);
+print(boundingBox); // Rectangle (0, 0) 150 x 150
+```
+
+</Accordion>
+
+### MutableRectangle
+
+<ParamField path="MutableRectangle<T>" type="class">
+  A 2D rectangle with mutable properties. Allows changing position and size after creation.
+</ParamField>
+
+```dart
+import 'dart:math';
+
+// Create mutable rectangle
+var rect = MutableRectangle(10, 10, 100, 50);
+print(rect); // Rectangle (10, 10) 100 x 50
+
+// Modify properties
+rect.left = 20;
+rect.top = 30;
+print(rect); // Rectangle (20, 30) 100 x 50
+
+rect.width = 150;
+rect.height = 75;
+print(rect); // Rectangle (20, 30) 150 x 75
+
+// Useful for animations or dynamic layouts
+void animateResize(MutableRectangle rect, int targetWidth) {
+  while (rect.width < targetWidth) {
+    rect.width += 10;
+    print('Current width: ${rect.width}');
+  }
+}
+```
+
+## Best Practices
+
+<Warning>
+1. **Seed Random for tests** - Use seeded Random() for reproducible tests
+2. **Use squaredDistanceTo when possible** - Faster than distanceTo (avoids sqrt)
+3. **Check for null intersections** - intersection() returns null if no overlap
+4. **Prefer const Point** - Use const Point(x, y) for compile-time constants
+5. **Trigonometry uses radians** - Convert degrees to radians when needed
+</Warning>
+
+<Tip>
+**For geometric operations**, consider using Point and Rectangle classes instead of raw numbers. They provide clearer code and useful utility methods.
+</Tip>
+
+## Common Patterns
+
+```dart
+import 'dart:math';
+
+// Generate random position within bounds
+Point<double> randomPosition(Rectangle bounds) {
+  var random = Random();
+  return Point(
+    bounds.left + random.nextDouble() * bounds.width,
+    bounds.top + random.nextDouble() * bounds.height,
+  );
+}
+
+var screen = Rectangle(0, 0, 1920, 1080);
+var pos = randomPosition(screen);
+print('Spawn at: $pos');
+
+// Clamp value to range
+T clamp<T extends num>(T value, T min, T max) {
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
+}
+
+var speed = clamp(150, 0, 100); // Returns 100
+var volume = clamp(50, 0, 100);  // Returns 50
+
+// Linear interpolation
+double lerp(double a, double b, double t) {
+  return a + (b - a) * t;
+}
+
+var start = 0.0;
+var end = 100.0;
+print(lerp(start, end, 0.5)); // 50.0 (midpoint)
+print(lerp(start, end, 0.25)); // 25.0
+
+// Map value from one range to another
+double mapRange(double value, double inMin, double inMax, 
+               double outMin, double outMax) {
+  return (value - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
+}
+
+// Map temperature from Celsius to Fahrenheit range
+var celsius = 25.0;
+var fahrenheit = mapRange(celsius, 0, 100, 32, 212);
+print('${celsius}°C = ${fahrenheit}°F'); // 25°C = 77°F
+
+// Calculate angle between two points
+double angleBetween(Point a, Point b) {
+  return atan2(b.y - a.y, b.x - a.x);
+}
+
+var p1 = Point(0, 0);
+var p2 = Point(1, 1);
+var angle = angleBetween(p1, p2);
+print('Angle: ${angle * 180 / pi}°'); // 45°
+```
+
+## Related Resources
+
+- [Math Library Tour](https://dart.dev/guides/libraries/library-tour#math-and-random) - Official guide
+- [Numbers in Dart](https://dart.dev/guides/language/numbers) - Number types
+- [dart:core](./dart-core) - Core numeric types (int, double, num)

@@ -1,0 +1,595 @@
+---
+title: dart:convert
+description: Encoding and decoding data including JSON, UTF-8, Base64, ASCII, and Latin-1
+---
+
+The `dart:convert` library provides encoders and decoders for converting between different data representations. It includes support for JSON, UTF-8, UTF-16, ASCII, Latin-1, Base64, and HTML escaping.
+
+## Overview
+
+To use this library in your code:
+
+```dart
+import 'dart:convert';
+```
+
+The dart:convert library includes:
+- **JSON** - JsonCodec, JsonEncoder, JsonDecoder
+- **UTF-8** - Utf8Codec, Utf8Encoder, Utf8Decoder
+- **Base64** - Base64Codec, Base64Encoder, Base64Decoder
+- **ASCII** - AsciiCodec, AsciiEncoder, AsciiDecoder
+- **Latin-1** - Latin1Codec, Latin1Encoder, Latin1Decoder
+- **HTML Escape** - HtmlEscape, HtmlEscapeMode
+- **Line Splitter** - LineSplitter
+
+## JSON
+
+### JSON Encoding and Decoding
+
+<ParamField path="json" type="JsonCodec constant">
+  The default JSON codec. Encodes Dart objects to JSON strings and decodes JSON strings to Dart objects.
+</ParamField>
+
+```dart
+import 'dart:convert';
+
+// Encoding (Dart to JSON string)
+var data = {
+  'name': 'Alice',
+  'age': 30,
+  'email': 'alice@example.com',
+  'hobbies': ['reading', 'hiking'],
+};
+
+var jsonString = json.encode(data);
+print(jsonString);
+// {"name":"Alice","age":30,"email":"alice@example.com","hobbies":["reading","hiking"]}
+
+// Decoding (JSON string to Dart)
+var decoded = json.decode(jsonString);
+print(decoded['name']); // Alice
+print(decoded['hobbies']); // [reading, hiking]
+
+// Arrays
+var list = [1, 2, 3, 4, 5];
+var listJson = json.encode(list); // "[1,2,3,4,5]"
+var decodedList = json.decode(listJson); // [1, 2, 3, 4, 5]
+```
+
+### JSON with Custom Objects
+
+```dart
+class User {
+  final String name;
+  final int age;
+  final String email;
+  
+  User(this.name, this.age, this.email);
+  
+  // Convert to JSON-encodable map
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'age': age,
+    'email': email,
+  };
+  
+  // Create from JSON map
+  factory User.fromJson(Map<String, dynamic> json) => User(
+    json['name'] as String,
+    json['age'] as int,
+    json['email'] as String,
+  );
+}
+
+// Encoding custom objects
+var user = User('Bob', 25, 'bob@example.com');
+var userJson = json.encode(user.toJson());
+print(userJson); // {"name":"Bob","age":25,"email":"bob@example.com"}
+
+// Decoding to custom objects
+var decoded = json.decode(userJson) as Map<String, dynamic>;
+var restoredUser = User.fromJson(decoded);
+print(restoredUser.name); // Bob
+```
+
+<Accordion title="JSON Encoder/Decoder Details">
+
+<ParamField path="JsonEncoder" type="class">
+  Converts Dart objects to JSON strings. Supports custom indentation for pretty printing.
+</ParamField>
+
+<ParamField path="JsonDecoder" type="class">
+  Parses JSON strings and returns Dart objects (maps, lists, strings, numbers, booleans, null).
+</ParamField>
+
+```dart
+// Pretty printing with indentation
+var encoder = JsonEncoder.withIndent('  ');
+var prettyJson = encoder.convert(data);
+print(prettyJson);
+/*
+{
+  "name": "Alice",
+  "age": 30,
+  "email": "alice@example.com",
+  "hobbies": [
+    "reading",
+    "hiking"
+  ]
+}
+*/
+
+// Custom toEncodable function
+var customEncoder = JsonEncoder(
+  (dynamic item) {
+    if (item is DateTime) {
+      return item.toIso8601String();
+    }
+    return item;
+  },
+);
+
+var withDate = {
+  'event': 'Meeting',
+  'time': DateTime.now(),
+};
+var encoded = customEncoder.convert(withDate);
+print(encoded); // {"event":"Meeting","time":"2026-03-03T10:30:00.000"}
+
+// Stream conversion
+import 'dart:io';
+
+var file = File('data.json');
+var stream = file.openRead()
+  .transform(utf8.decoder)
+  .transform(json.decoder);
+
+await for (var data in stream) {
+  print('Decoded: $data');
+}
+```
+
+</Accordion>
+
+### JSON Error Handling
+
+```dart
+// Handle invalid JSON
+try {
+  var invalid = json.decode('{invalid json}');
+} on FormatException catch (e) {
+  print('Invalid JSON: ${e.message}');
+}
+
+// Validate before decoding
+bool isValidJson(String str) {
+  try {
+    json.decode(str);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+```
+
+## UTF-8
+
+### UTF-8 Encoding and Decoding
+
+<ParamField path="utf8" type="Utf8Codec constant">
+  The default UTF-8 codec. Encodes strings to UTF-8 bytes and decodes UTF-8 bytes to strings.
+</ParamField>
+
+```dart
+import 'dart:convert';
+import 'dart:typed_data';
+
+// Encode string to UTF-8 bytes
+var text = 'Hello, 世界! 🌍';
+var bytes = utf8.encode(text);
+print(bytes);
+// [72, 101, 108, 108, 111, 44, 32, 228, 184, 150, 231, 149, 140, 33, 32, 240, 159, 140, 141]
+
+// Decode UTF-8 bytes to string
+var decoded = utf8.decode(bytes);
+print(decoded); // Hello, 世界! 🌍
+
+// From List<int>
+var byteList = [72, 101, 108, 108, 111];
+var str = utf8.decode(byteList);
+print(str); // Hello
+```
+
+<Accordion title="UTF-8 Options and Stream Processing">
+
+```dart
+// Decode with error handling
+var invalidBytes = [0xFF, 0xFE, 0xFD];
+
+// Replace invalid sequences with replacement character
+var decoded = utf8.decode(invalidBytes, allowMalformed: true);
+print(decoded); // � (replacement character)
+
+// Throw on invalid sequences (default)
+try {
+  utf8.decode(invalidBytes);
+} on FormatException catch (e) {
+  print('Invalid UTF-8: $e');
+}
+
+// Stream conversion
+import 'dart:io';
+
+var file = File('text.txt');
+var lines = file.openRead()
+  .transform(utf8.decoder)
+  .transform(LineSplitter());
+
+await for (var line in lines) {
+  print('Line: $line');
+}
+
+// Encode to stream
+var sink = File('output.txt').openWrite();
+sink.write('Hello, ');
+sink.write('世界!');
+await sink.flush();
+await sink.close();
+```
+
+</Accordion>
+
+## Base64
+
+### Base64 Encoding and Decoding
+
+<ParamField path="base64" type="Base64Codec constant">
+  The default Base64 codec. Encodes bytes to Base64 strings and decodes Base64 strings to bytes.
+</ParamField>
+
+```dart
+import 'dart:convert';
+
+// Encode bytes to Base64
+var bytes = [72, 101, 108, 108, 111];
+var encoded = base64.encode(bytes);
+print(encoded); // SGVsbG8=
+
+// Encode string (via UTF-8)
+var text = 'Hello, World!';
+var textBytes = utf8.encode(text);
+var base64Text = base64.encode(textBytes);
+print(base64Text); // SGVsbG8sIFdvcmxkIQ==
+
+// Decode Base64 to bytes
+var decoded = base64.decode('SGVsbG8=');
+print(decoded); // [72, 101, 108, 108, 111]
+
+// Decode to string
+var decodedText = utf8.decode(base64.decode(base64Text));
+print(decodedText); // Hello, World!
+```
+
+<Accordion title="Base64 Variants">
+
+<ParamField path="base64Url" type="Base64Codec constant">
+  Base64 codec with URL-safe alphabet. Uses - and _ instead of + and /.
+</ParamField>
+
+```dart
+// URL-safe Base64 (uses - and _ instead of + and /)
+var urlSafe = base64Url.encode([251, 239, 127]);
+print(urlSafe); // --9_
+
+// Standard Base64 would use + and /
+var standard = base64.encode([251, 239, 127]);
+print(standard); // ++9/
+
+// Decode URL-safe Base64
+var urlDecoded = base64Url.decode(urlSafe);
+print(urlDecoded); // [251, 239, 127]
+
+// Custom Base64 with no padding
+var noPadding = base64.encode([72, 101, 108, 108, 111]);
+print(noPadding); // SGVsbG8= (with padding)
+
+// Remove padding manually if needed
+var withoutPadding = noPadding.replaceAll('=', '');
+print(withoutPadding); // SGVsbG8
+```
+
+</Accordion>
+
+## ASCII
+
+### ASCII Encoding and Decoding
+
+<ParamField path="ascii" type="AsciiCodec constant">
+  The ASCII codec. Only supports characters 0-127. Throws on non-ASCII characters.
+</ParamField>
+
+```dart
+import 'dart:convert';
+
+// Encode ASCII string
+var text = 'Hello, World!';
+var bytes = ascii.encode(text);
+print(bytes); // [72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33]
+
+// Decode ASCII bytes
+var decoded = ascii.decode(bytes);
+print(decoded); // Hello, World!
+
+// Error on non-ASCII characters
+try {
+  ascii.encode('Hello, 世界!'); // Non-ASCII characters
+} on ArgumentError catch (e) {
+  print('Cannot encode: $e');
+}
+
+// Allow invalid characters (replace with ?)
+var encoder = AsciiEncoder();
+var invalid = ascii.encode('Café', allowInvalid: true);
+var result = ascii.decode(invalid);
+print(result); // Caf? (é replaced)
+```
+
+## Latin-1
+
+### Latin-1 Encoding and Decoding
+
+<ParamField path="latin1" type="Latin1Codec constant">
+  The Latin-1 (ISO-8859-1) codec. Supports characters 0-255.
+</ParamField>
+
+```dart
+import 'dart:convert';
+
+// Encode Latin-1 string
+var text = 'Café résumé';
+var bytes = latin1.encode(text);
+print(bytes); // [67, 97, 102, 233, 32, 114, 233, 115, 117, 109, 233]
+
+// Decode Latin-1 bytes
+var decoded = latin1.decode(bytes);
+print(decoded); // Café résumé
+
+// European characters
+var danish = 'blåbærgrød';
+var encoded = latin1.encode(danish);
+var back = latin1.decode(encoded);
+print(back); // blåbærgrød
+```
+
+## HTML Escape
+
+### HTML Entity Escaping
+
+<ParamField path="HtmlEscape" type="class">
+  Escapes special HTML characters. Converts less-than, greater-than, ampersand, quotes, and slash to HTML entities.
+</ParamField>
+
+```dart
+import 'dart:convert';
+
+// Default HTML escape
+const htmlEscape = HtmlEscape();
+
+var unsafe = '<script>alert("XSS")</script>';
+var safe = htmlEscape.convert(unsafe);
+print(safe);
+// &lt;script&gt;alert(&quot;XSS&quot;)&lt;&#47;script&gt;
+
+// Escape user input
+var userInput = 'Name: <Bob> & "Friends"';
+var escaped = htmlEscape.convert(userInput);
+print(escaped);
+// Name: &lt;Bob&gt; &amp; &quot;Friends&quot;
+
+// Custom escape mode
+var customEscape = HtmlEscape(HtmlEscapeMode(
+  name: 'custom',
+  escapeLtGt: true,
+  escapeQuot: false,
+  escapeApos: false,
+  escapeSlash: false,
+));
+
+var partial = customEscape.convert('Text & "subject"');
+print(partial); // Text &amp; "subject"
+```
+
+<Accordion title="HTML Escape Modes">
+
+```dart
+// Predefined modes
+var modes = [
+  HtmlEscapeMode.unknown,    // Escape all special chars
+  HtmlEscapeMode.attribute,  // For attribute values
+  HtmlEscapeMode.element,    // For element content
+];
+
+// Attribute escaping
+const attrEscape = HtmlEscape(HtmlEscapeMode.attribute);
+var attrValue = 'value="data" onclick="alert(1)"';
+var safeAttr = attrEscape.convert(attrValue);
+print(safeAttr);
+
+// Element escaping
+const elemEscape = HtmlEscape(HtmlEscapeMode.element);
+var content = '<div>Content & more</div>';
+var safeContent = elemEscape.convert(content);
+print(safeContent);
+```
+
+</Accordion>
+
+## Line Splitter
+
+### Splitting Text by Lines
+
+<ParamField path="LineSplitter" type="class">
+  Splits strings on line boundaries. Handles \n, \r\n, and \r line endings.
+</ParamField>
+
+```dart
+import 'dart:convert';
+
+// Split text into lines
+var text = 'Line 1\nLine 2\r\nLine 3\rLine 4';
+var lines = LineSplitter.split(text);
+for (var line in lines) {
+  print('[$line]');
+}
+// [Line 1]
+// [Line 2]
+// [Line 3]
+// [Line 4]
+
+// Use with streams
+import 'dart:io';
+
+var file = File('data.txt');
+var lineStream = file.openRead()
+  .transform(utf8.decoder)
+  .transform(LineSplitter());
+
+var lineNumber = 1;
+await for (var line in lineStream) {
+  print('${lineNumber++}: $line');
+}
+
+// Convert iterable to list
+var lineList = LineSplitter.split(text).toList();
+print(lineList.length); // Number of lines
+```
+
+## Codec and Converter
+
+### Creating Custom Codecs
+
+<Accordion title="Custom Codec Example">
+
+<ParamField path="Codec<S, T>" type="abstract class">
+  A two-way conversion between two data representations.
+</ParamField>
+
+<ParamField path="Converter<S, T>" type="abstract class">
+  A one-way conversion from S to T.
+</ParamField>
+
+```dart
+import 'dart:convert';
+
+// Custom ROT13 cipher converter
+class Rot13Encoder extends Converter<String, String> {
+  const Rot13Encoder();
+  
+  @override
+  String convert(String input) {
+    return input.split('').map((char) {
+      var code = char.codeUnitAt(0);
+      if (code >= 65 && code <= 90) {
+        return String.fromCharCode(((code - 65 + 13) % 26) + 65);
+      } else if (code >= 97 && code <= 122) {
+        return String.fromCharCode(((code - 97 + 13) % 26) + 97);
+      }
+      return char;
+    }).join('');
+  }
+}
+
+class Rot13Decoder extends Converter<String, String> {
+  const Rot13Decoder();
+  
+  @override
+  String convert(String input) {
+    return const Rot13Encoder().convert(input); // ROT13 is symmetric
+  }
+}
+
+class Rot13Codec extends Codec<String, String> {
+  const Rot13Codec();
+  
+  @override
+  Converter<String, String> get encoder => const Rot13Encoder();
+  
+  @override
+  Converter<String, String> get decoder => const Rot13Decoder();
+}
+
+// Usage
+const rot13 = Rot13Codec();
+var encoded = rot13.encode('Hello, World!');
+print(encoded); // Uryyb, Jbeyq!
+
+var decoded = rot13.decode(encoded);
+print(decoded); // Hello, World!
+```
+
+</Accordion>
+
+## Best Practices
+
+<Warning>
+1. **Always handle encoding errors** - Use try-catch for invalid data
+2. **Use UTF-8 for text files** - Most universal text encoding
+3. **Sanitize HTML input** - Always escape user-provided HTML content
+4. **Choose the right Base64** - Use base64Url for URLs and filenames
+5. **Stream large files** - Don't load entire files into memory for encoding/decoding
+</Warning>
+
+<Tip>
+**JSON is text-based and UTF-8 encoded**. When working with JSON files, combine `utf8.decoder` and `json.decoder` for stream processing.
+</Tip>
+
+## Common Patterns
+
+```dart
+import 'dart:convert';
+import 'dart:io';
+
+// Read and parse JSON file
+Future<Map<String, dynamic>> readJsonFile(String path) async {
+  var file = File(path);
+  var contents = await file.readAsString();
+  return json.decode(contents) as Map<String, dynamic>;
+}
+
+// Write JSON file with pretty printing
+Future<void> writeJsonFile(String path, Map<String, dynamic> data) async {
+  var encoder = JsonEncoder.withIndent('  ');
+  var contents = encoder.convert(data);
+  await File(path).writeAsString(contents);
+}
+
+// Stream large JSON array
+Future<void> processLargeJson(String path) async {
+  var file = File(path);
+  var stream = file.openRead()
+    .transform(utf8.decoder)
+    .transform(json.decoder);
+  
+  await for (var item in stream) {
+    // Process each item
+    print(item);
+  }
+}
+
+// Convert binary data to Base64 data URI
+String toDataUri(List<int> bytes, String mimeType) {
+  var base64Data = base64.encode(bytes);
+  return 'data:$mimeType;base64,$base64Data';
+}
+
+// Example: image data URI
+var imageBytes = await File('image.png').readAsBytes();
+var dataUri = toDataUri(imageBytes, 'image/png');
+print(dataUri); // data:image/png;base64,iVBORw0KG...
+```
+
+## Related Resources
+
+- [JSON and Serialization](https://dart.dev/guides/json) - Official guide
+- [dart:io](./dart-io) - File I/O for reading/writing encoded data
+- [Character Encodings](https://dart.dev/guides/libraries/library-tour#decoding-and-encoding-json) - Library tour

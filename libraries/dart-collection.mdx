@@ -1,0 +1,506 @@
+---
+title: dart:collection
+description: Specialized collection types including HashMap, LinkedHashMap, Queue, and SplayTreeMap
+---
+
+The `dart:collection` library provides specialized collection classes and utilities that supplement the collection support in `dart:core`. It includes efficient implementations of maps, sets, queues, and linked lists.
+
+## Overview
+
+To use this library in your code:
+
+```dart
+import 'dart:collection';
+```
+
+The dart:collection library includes:
+- **Map implementations** - HashMap, LinkedHashMap, SplayTreeMap
+- **Set implementations** - HashSet, LinkedHashSet, SplayTreeSet
+- **Queue implementations** - Queue, ListQueue, DoubleLinkedQueue
+- **List utilities** - UnmodifiableListView
+- **Linked data structures** - LinkedList, LinkedListEntry
+
+## Map Implementations
+
+### HashMap
+
+<ParamField path="HashMap<K, V>" type="class">
+  A hash-table based implementation of Map. The order of iteration is not guaranteed.
+</ParamField>
+
+```dart
+// Create a HashMap
+var scores = HashMap<String, int>();
+scores['Alice'] = 100;
+scores['Bob'] = 95;
+scores['Charlie'] = 88;
+
+// Iteration order is not guaranteed
+for (var entry in scores.entries) {
+  print('${entry.key}: ${entry.value}');
+}
+
+// With custom equality and hash
+var customMap = HashMap<String, int>(
+  equals: (a, b) => a.toLowerCase() == b.toLowerCase(),
+  hashCode: (key) => key.toLowerCase().hashCode,
+);
+```
+
+### LinkedHashMap
+
+<ParamField path="LinkedHashMap<K, V>" type="class">
+  A hash-table based Map that maintains insertion order. Iterates in the order keys were inserted.
+</ParamField>
+
+```dart
+// Create a LinkedHashMap (default Map implementation)
+var menu = LinkedHashMap<String, double>();
+menu['Coffee'] = 3.50;
+menu['Tea'] = 2.50;
+menu['Juice'] = 4.00;
+
+// Iterates in insertion order
+for (var item in menu.keys) {
+  print('$item: \$${menu[item]}');
+}
+// Output: Coffee, Tea, Juice (in that order)
+
+// From iterables with ordering preserved
+var fromIterables = LinkedHashMap.fromIterables(
+  ['first', 'second', 'third'],
+  [1, 2, 3],
+);
+```
+
+### SplayTreeMap
+
+<ParamField path="SplayTreeMap<K, V>" type="class">
+  A self-balancing binary tree implementation of Map. Keys are kept in sorted order.
+</ParamField>
+
+```dart
+// Create a SplayTreeMap (sorted by key)
+var sortedScores = SplayTreeMap<String, int>();
+sortedScores['Charlie'] = 88;
+sortedScores['Alice'] = 100;
+sortedScores['Bob'] = 95;
+
+// Iterates in sorted key order
+for (var name in sortedScores.keys) {
+  print('$name: ${sortedScores[name]}');
+}
+// Output: Alice: 100, Bob: 95, Charlie: 88
+
+// Custom comparison
+var customSort = SplayTreeMap<String, int>(
+  (a, b) => b.compareTo(a), // Reverse order
+);
+
+// Range queries
+var numbers = SplayTreeMap<int, String>.from({
+  1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five'
+});
+var subset = numbers.keys.where((k) => k >= 2 && k <= 4);
+print(subset); // (2, 3, 4)
+```
+
+<Accordion title="Map Views">
+
+<ParamField path="UnmodifiableMapView<K, V>" type="class">
+  An unmodifiable view of another Map. Prevents modifications while allowing reads.
+</ParamField>
+
+```dart
+var original = {'a': 1, 'b': 2};
+var view = UnmodifiableMapView(original);
+
+print(view['a']); // 1
+// view['c'] = 3; // Throws UnsupportedError
+
+// Changes to original are visible in view
+original['c'] = 3;
+print(view['c']); // 3
+```
+
+</Accordion>
+
+## Set Implementations
+
+### HashSet
+
+<ParamField path="HashSet<E>" type="class">
+  A hash-table based Set implementation. Provides fast membership tests. Order is not guaranteed.
+</ParamField>
+
+```dart
+// Create a HashSet
+var uniqueNames = HashSet<String>();
+uniqueNames.add('Alice');
+uniqueNames.add('Bob');
+uniqueNames.add('Alice'); // Duplicate, not added
+
+print(uniqueNames.length); // 2
+
+// Fast lookup
+if (uniqueNames.contains('Alice')) {
+  print('Alice is in the set');
+}
+
+// Set operations
+var set1 = HashSet.from([1, 2, 3, 4]);
+var set2 = HashSet.from([3, 4, 5, 6]);
+
+var union = set1.union(set2);           // {1, 2, 3, 4, 5, 6}
+var intersection = set1.intersection(set2); // {3, 4}
+var difference = set1.difference(set2);     // {1, 2}
+```
+
+### LinkedHashSet
+
+<ParamField path="LinkedHashSet<E>" type="class">
+  A hash-table based Set that maintains insertion order. Iterates in insertion order.
+</ParamField>
+
+```dart
+// Maintains insertion order
+var orderedSet = LinkedHashSet<String>();
+orderedSet.add('Charlie');
+orderedSet.add('Alice');
+orderedSet.add('Bob');
+
+print(orderedSet); // {Charlie, Alice, Bob}
+
+// Remove and re-add changes order
+orderedSet.remove('Alice');
+orderedSet.add('Alice');
+print(orderedSet); // {Charlie, Bob, Alice}
+```
+
+### SplayTreeSet
+
+<ParamField path="SplayTreeSet<E>" type="class">
+  A self-balancing binary tree Set. Elements are kept in sorted order.
+</ParamField>
+
+```dart
+// Create a sorted set
+var sortedSet = SplayTreeSet<int>();
+sortedSet.addAll([5, 2, 8, 1, 9, 3]);
+
+print(sortedSet); // {1, 2, 3, 5, 8, 9}
+
+// Custom comparison
+var reverseSet = SplayTreeSet<int>((a, b) => b.compareTo(a));
+reverseSet.addAll([1, 2, 3, 4, 5]);
+print(reverseSet); // {5, 4, 3, 2, 1}
+
+// Case-insensitive string set
+var caseInsensitive = SplayTreeSet<String>(
+  (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
+);
+caseInsensitive.addAll(['Bob', 'alice', 'CHARLIE']);
+print(caseInsensitive); // {alice, Bob, CHARLIE}
+```
+
+<Accordion title="Set Views">
+
+<ParamField path="UnmodifiableSetView<E>" type="class">
+  An unmodifiable view of another Set.
+</ParamField>
+
+```dart
+var original = {1, 2, 3};
+var view = UnmodifiableSetView(original);
+
+print(view.contains(2)); // true
+// view.add(4); // Throws UnsupportedError
+```
+
+</Accordion>
+
+## Queue Implementations
+
+### Queue
+
+<ParamField path="Queue<E>" type="abstract class">
+  A double-ended queue. Elements can be added or removed from both ends.
+</ParamField>
+
+```dart
+// Create a queue (default implementation is ListQueue)
+var queue = Queue<String>();
+
+// Add elements
+queue.add('First');      // Add to end
+queue.addLast('Second'); // Add to end
+queue.addFirst('Zero');  // Add to front
+
+print(queue); // (Zero, First, Second)
+
+// Remove elements
+var first = queue.removeFirst();  // 'Zero'
+var last = queue.removeLast();    // 'Second'
+
+print(queue); // (First)
+
+// Use as FIFO queue
+queue.add('A');
+queue.add('B');
+queue.add('C');
+while (queue.isNotEmpty) {
+  print(queue.removeFirst()); // A, B, C
+}
+
+// Use as stack (LIFO)
+queue.add('X');
+queue.add('Y');
+queue.add('Z');
+while (queue.isNotEmpty) {
+  print(queue.removeLast()); // Z, Y, X
+}
+```
+
+### ListQueue
+
+<ParamField path="ListQueue<E>" type="class">
+  List-based queue implementation. Efficient for most queue operations.
+</ParamField>
+
+```dart
+// Create with initial capacity
+var queue = ListQueue<int>(10);
+
+// Add elements efficiently
+for (var i = 0; i < 100; i++) {
+  queue.add(i);
+}
+
+// Access like a list (but slower than add/remove from ends)
+var middle = queue.elementAt(queue.length ~/ 2);
+```
+
+### DoubleLinkedQueue
+
+<ParamField path="DoubleLinkedQueue<E>" type="class">
+  Doubly-linked list based queue. Efficient for frequent insertions/removals.
+</ParamField>
+
+```dart
+var queue = DoubleLinkedQueue<String>();
+
+// Very efficient add/remove from both ends
+queue.addFirst('A');
+queue.addLast('B');
+queue.addFirst('C');
+
+print(queue); // (C, A, B)
+
+// Efficient removal
+queue.removeFirst();
+queue.removeLast();
+print(queue); // (A)
+```
+
+## List Utilities
+
+### UnmodifiableListView
+
+<ParamField path="UnmodifiableListView<E>" type="class">
+  An unmodifiable view of a List. Prevents modifications while allowing reads and iterations.
+</ParamField>
+
+```dart
+var original = [1, 2, 3, 4, 5];
+var view = UnmodifiableListView(original);
+
+// Read operations work
+print(view[2]); // 3
+print(view.length); // 5
+print(view.first); // 1
+
+// Modifications throw errors
+// view[0] = 10; // Throws UnsupportedError
+// view.add(6);  // Throws UnsupportedError
+
+// Changes to original are visible
+original[0] = 100;
+print(view[0]); // 100
+
+// Use case: expose internal list safely
+class Library {
+  final List<String> _books = [];
+  
+  void addBook(String title) => _books.add(title);
+  
+  // Return unmodifiable view
+  List<String> get books => UnmodifiableListView(_books);
+}
+```
+
+## LinkedList
+
+<ParamField path="LinkedList<E>" type="class">
+  A specialized doubly-linked list where each element extends LinkedListEntry.
+</ParamField>
+
+<Accordion title="LinkedList Usage">
+
+```dart
+// Define an entry type
+class Task extends LinkedListEntry<Task> {
+  final String name;
+  final int priority;
+  
+  Task(this.name, this.priority);
+  
+  @override
+  String toString() => '$name (priority: $priority)';
+}
+
+// Create and use linked list
+var tasks = LinkedList<Task>();
+
+// Add tasks
+var task1 = Task('Write code', 1);
+var task2 = Task('Review PR', 2);
+var task3 = Task('Deploy', 3);
+
+tasks.add(task1);
+tasks.add(task2);
+tasks.add(task3);
+
+// Each entry knows its position
+print(task2.previous); // Write code (priority: 1)
+print(task2.next);     // Deploy (priority: 3)
+print(task2.list);     // The LinkedList instance
+
+// Insert before/after
+var urgentTask = Task('Fix bug', 0);
+tasks.addFirst(urgentTask);
+
+// Remove from anywhere
+task2.unlink(); // Remove from list
+
+// Iterate
+for (var task in tasks) {
+  print(task);
+}
+```
+
+</Accordion>
+
+## Iteration Utilities
+
+```dart
+import 'dart:collection';
+
+// Custom iterable base classes
+class RangeIterable extends IterableBase<int> {
+  final int start;
+  final int end;
+  
+  RangeIterable(this.start, this.end);
+  
+  @override
+  Iterator<int> get iterator => RangeIterator(start, end);
+}
+
+class RangeIterator implements Iterator<int> {
+  final int end;
+  int _current;
+  
+  RangeIterator(int start, this.end) : _current = start - 1;
+  
+  @override
+  int get current => _current;
+  
+  @override
+  bool moveNext() {
+    if (_current < end) {
+      _current++;
+      return true;
+    }
+    return false;
+  }
+}
+
+// Usage
+var range = RangeIterable(1, 5);
+for (var i in range) {
+  print(i); // 1, 2, 3, 4, 5
+}
+```
+
+## Best Practices
+
+<Warning>
+1. **Choose the right collection**:
+   - Need insertion order? Use LinkedHashMap/LinkedHashSet
+   - Need sorted order? Use SplayTreeMap/SplayTreeSet
+   - Need maximum performance? Use HashMap/HashSet
+   - Need a queue? Use Queue/ListQueue
+2. **Use unmodifiable views** to safely expose internal collections
+3. **Consider memory usage** - SplayTree uses more memory than hash-based collections
+4. **LinkedList is specialized** - only use when elements need to know their position
+</Warning>
+
+<Tip>
+**HashMap and HashSet** are the default implementations for Map and Set when using literals `{}`. Use specialized collections when you need specific ordering or performance characteristics.
+</Tip>
+
+## Common Patterns
+
+```dart
+// Frequency counter with HashMap
+Map<String, int> countWords(List<String> words) {
+  var counts = HashMap<String, int>();
+  for (var word in words) {
+    counts[word] = (counts[word] ?? 0) + 1;
+  }
+  return counts;
+}
+
+// LRU cache with LinkedHashMap
+class LRUCache<K, V> {
+  final int maxSize;
+  final _cache = LinkedHashMap<K, V>();
+  
+  LRUCache(this.maxSize);
+  
+  V? get(K key) {
+    var value = _cache.remove(key);
+    if (value != null) {
+      _cache[key] = value; // Move to end
+    }
+    return value;
+  }
+  
+  void put(K key, V value) {
+    _cache.remove(key);
+    _cache[key] = value;
+    if (_cache.length > maxSize) {
+      _cache.remove(_cache.keys.first);
+    }
+  }
+}
+
+// Sorted set operations
+void sortedSetExample() {
+  var numbers = SplayTreeSet<int>.from([5, 2, 8, 1, 9]);
+  
+  // Range queries
+  var inRange = numbers.where((n) => n >= 2 && n <= 8);
+  print(inRange); // (2, 5, 8)
+  
+  // Min/max
+  print(numbers.first); // 1 (minimum)
+  print(numbers.last);  // 9 (maximum)
+}
+```
+
+## Related Resources
+
+- [Collections Guide](https://dart.dev/guides/libraries/library-tour#collections) - Official guide
+- [dart:core](./dart-core) - Core collection types (List, Map, Set)
+- [Effective Dart: Usage](https://dart.dev/guides/language/effective-dart/usage#collections) - Collection best practices

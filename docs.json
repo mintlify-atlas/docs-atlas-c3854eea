@@ -67,10 +67,14 @@
               "libraries/overview",
               "libraries/dart-core",
               "libraries/dart-async",
+              "libraries/dart-collection",
+              "libraries/dart-convert",
               "libraries/dart-io",
               "libraries/dart-ffi",
               "libraries/dart-html",
-              "libraries/dart-isolate"
+              "libraries/dart-isolate",
+              "libraries/dart-js-interop",
+              "libraries/dart-math"
             ]
           },
           {
