@@ -1,0 +1,185 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Dart SDK",
+  "projectDescription": "The complete Dart SDK including VM, compilers, core libraries, and development tools for building high-quality apps on any platform.",
+  "theme": "palm",
+  "primaryColor": "#0175C2",
+  "lightColor": "#13B9FD",
+  "darkColor": "#01579B",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Building the SDK",
+            "pages": [
+              "building/overview",
+              "building/dependencies",
+              "building/from-source",
+              "building/for-arm-risc-v",
+              "building/for-android",
+              "building/for-fuchsia"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/dart-vm",
+              "concepts/compilation",
+              "concepts/isolates",
+              "concepts/snapshots"
+            ]
+          },
+          {
+            "group": "Compilers",
+            "pages": [
+              "compilers/overview",
+              "compilers/dart2js",
+              "compilers/dart2wasm",
+              "compilers/dartdevc",
+              "compilers/aot-jit"
+            ]
+          },
+          {
+            "group": "Core Libraries",
+            "pages": [
+              "libraries/overview",
+              "libraries/dart-core",
+              "libraries/dart-async",
+              "libraries/dart-io",
+              "libraries/dart-ffi",
+              "libraries/dart-html",
+              "libraries/dart-isolate"
+            ]
+          },
+          {
+            "group": "Runtime & VM",
+            "pages": [
+              "runtime/overview",
+              "runtime/object-model",
+              "runtime/garbage-collection",
+              "runtime/optimization",
+              "runtime/vm-flags"
+            ]
+          },
+          {
+            "group": "Tools & CLI",
+            "pages": [
+              "tools/dart-command",
+              "tools/analyzer",
+              "tools/formatter",
+              "tools/pub",
+              "tools/devtools"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "development/contributing",
+              "development/testing",
+              "development/debugging",
+              "development/experimental-flags"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "VM C API",
+            "pages": [
+              "api/dart-api",
+              "api/native-extensions",
+              "api/embedding"
+            ]
+          },
+          {
+            "group": "Compiler Internals",
+            "pages": [
+              "api/il-instructions",
+              "api/optimization-passes",
+              "api/code-generation"
+            ]
+          },
+          {
+            "group": "Kernel Format",
+            "pages": [
+              "api/kernel-overview",
+              "api/kernel-ast",
+              "api/kernel-transformations"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Contributing",
+        "groups": [
+          {
+            "group": "Contribution Guide",
+            "pages": [
+              "contributing/getting-started",
+              "contributing/code-review",
+              "contributing/commit-guidelines",
+              "contributing/testing-requirements"
+            ]
+          },
+          {
+            "group": "Processes",
+            "pages": [
+              "contributing/branches-releases",
+              "contributing/cherry-picks",
+              "contributing/filing-issues",
+              "contributing/triaging"
+            ]
+          },
+          {
+            "group": "Maintenance",
+            "pages": [
+              "contributing/package-maintenance",
+              "contributing/dependencies",
+              "contributing/flutter-packages"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multi-platform compilation (ARM, x64, RISC-V, Web)",
+    "JIT and AOT compilation pipelines",
+    "Hot reload for iterative development",
+    "Comprehensive core libraries",
+    "Strong type system with null safety",
+    "Advanced garbage collection",
+    "DevTools for debugging and profiling",
+    "Multiple web compilation targets (JS, Wasm)"
+  ],
+  "publicApiSurface": [
+    "dart:core - Core types and functionality",
+    "dart:async - Asynchronous programming",
+    "dart:io - File, socket, HTTP, and I/O",
+    "dart:collection - Collections and data structures",
+    "dart:convert - Encoders and decoders",
+    "dart:ffi - Foreign Function Interface",
+    "dart:html - HTML and DOM for web apps",
+    "dart:isolate - Concurrent programming with isolates",
+    "dart:js_interop - JavaScript interoperability",
+    "dart:math - Mathematical functions",
+    "Dart VM C API - Embedding and native extensions",
+    "dart command - CLI for running and compiling Dart",
+    "dart2js - Dart-to-JavaScript compiler",
+    "dart2wasm - Dart-to-WebAssembly compiler",
+    "analyzer - Static analysis engine",
+    "pub - Package manager"
+  ]
+}
