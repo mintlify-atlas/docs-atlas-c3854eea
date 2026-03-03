@@ -1,0 +1,376 @@
+---
+title: Building for Android
+description: Build and run the standalone Dart VM for Android devices
+---
+
+It is possible to build and run the standalone Dart VM for Android devices and emulators.
+
+## Limitations
+
+Before you begin, be aware of these limitations:
+
+<Warning>
+- The host (build) machine must be an x64 Linux machine or a Mac
+- The target device must support the Android NDK
+- The Android Dart VM can only be run from the Android command line
+- The Android Dart VM only has access to dart:core APIs - it does not have access to Android C or Java APIs
+- Android-related tools and emulator images require about 2GB of disk space
+</Warning>
+
+## One-Time Setup
+
+<Steps>
+  <Step title="Get the Dart source">
+    Download and install the Dart source tree using the standard instructions:
+
+    ```bash
+    mkdir dart-sdk
+    cd dart-sdk
+    fetch dart
+    ```
+
+    See [Building from Source](/building/from-source) for detailed instructions.
+  </Step>
+
+  <Step title="Configure Android dependencies">
+    Use a text editor to update your `.gclient` file (located in the directory that contains the main `dart` directory):
+
+    ```python
+    "custom_vars": {
+      "download_android_deps": True,
+    },
+    ```
+
+    <Note>
+    Add this to the existing `custom_vars` section if you already have one, or create the section if it doesn't exist.
+    </Note>
+  </Step>
+
+  <Step title="Sync Android dependencies">
+    Run `gclient sync` to download the Android NDK and SDK:
+
+    ```bash
+    gclient sync
+    ```
+
+    <Info>
+    This may take 10 minutes or more depending on your internet connection speed. The download includes the Android NDK, SDK, and build tools.
+    </Info>
+  </Step>
+</Steps>
+
+## Building for Android
+
+Once you've set up your build tree, build the Dart VM for Android using the standard build script with the `--os android` flag:
+
+<CodeGroup>
+  ```bash Single Architecture
+  ./tools/build.py --arch=arm64 --os=android runtime
+  ```
+
+  ```bash Multiple Architectures
+  ./tools/build.py --arch=arm,arm64,x64,riscv64 --os=android runtime
+  ```
+
+  ```bash With SDK
+  ./tools/build.py --mode=release --arch=arm64 --os=android create_sdk
+  ```
+</CodeGroup>
+
+### Supported Architectures
+
+The Android Dart VM supports these architectures:
+
+- `arm` - 32-bit ARM (armeabi-v7a)
+- `arm64` - 64-bit ARM (arm64-v8a)
+- `x64` - 64-bit x86
+- `riscv64` - 64-bit RISC-V
+
+### Build Output
+
+The built Dart VM executables are located at:
+
+```bash
+out/android/ReleaseAndroidARM/dart      # 32-bit ARM
+out/android/ReleaseAndroidARM64/dart    # 64-bit ARM
+out/android/ReleaseAndroidX64/dart      # 64-bit x86
+out/android/ReleaseAndroidRISCV64/dart  # 64-bit RISC-V
+```
+
+## Testing on Android
+
+### Add adb to Your PATH
+
+For convenience, add the Android Debug Bridge (adb) tool to your PATH:
+
+```bash
+export PATH=$PATH:path-to-dart/third_party/android_tools/sdk/platform-tools
+```
+
+<Note>
+Add this to your shell's rc file (`.bashrc`, `.zshrc`, etc.) to make it permanent.
+</Note>
+
+### Testing with an Emulator
+
+<Steps>
+  <Step title="Start an Android emulator">
+    Use the `android_finder.py` script to start an emulator:
+
+    ```bash
+    runtime/tools/android_finder.py -a armeabi-v7a -b
+    ```
+
+    Replace `armeabi-v7a` with your target architecture (`armeabi-v7a` or `x86`).
+
+    The flags:
+    - `-a`: Specifies the architecture to find
+    - `-b`: Bootstrap (start) a new emulator if none exists
+
+    <Info>
+    This script may take up to 20 seconds if a new emulator needs to be started.
+    </Info>
+  </Step>
+
+  <Step title="Create a directory on the emulator">
+    ```bash
+    adb shell mkdir /data/local/tmp/dart
+    ```
+  </Step>
+
+  <Step title="Push the Dart VM to the emulator">
+    Copy the Dart executable to the device:
+
+    ```bash
+    adb push out/android/ReleaseAndroidARM64/dart /data/local/tmp/dart/dart
+    ```
+
+    Adjust the path based on your target architecture:
+    - ARM: `ReleaseAndroidARM`
+    - ARM64: `ReleaseAndroidARM64`
+    - X64: `ReleaseAndroidX64`
+    - RISC-V64: `ReleaseAndroidRISCV64`
+  </Step>
+
+  <Step title="Create a test script">
+    Create a simple Dart test program:
+
+    ```bash
+    echo 'main(){ print("Hello, world!");}' > hello.dart
+    ```
+  </Step>
+
+  <Step title="Push the test script">
+    Copy the test script to the device:
+
+    ```bash
+    adb push hello.dart /data/local/tmp/dart
+    ```
+  </Step>
+
+  <Step title="Run the Dart VM">
+    Execute your Dart script on Android:
+
+    ```bash
+    adb shell /data/local/tmp/dart/dart /data/local/tmp/dart/hello.dart
+    ```
+
+    You should see:
+    ```
+    Hello, world!
+    ```
+  </Step>
+</Steps>
+
+### Testing on a Physical Device
+
+<Steps>
+  <Step title="Enable USB debugging">
+    On your Android device:
+
+    1. Go to Settings > Developer options
+    2. Enable "USB debugging"
+    3. Connect your device via USB
+
+    <Note>
+    If you don't see "Developer options", go to Settings > About phone and tap "Build number" 7 times.
+    </Note>
+
+    <Warning>
+    You may need root access on some devices.
+    </Warning>
+  </Step>
+
+  <Step title="Verify device connection">
+    Check that your device is connected:
+
+    ```bash
+    adb devices
+    ```
+
+    You should see output like:
+    ```
+    List of devices attached
+    TA23701VKR  device
+    ```
+  </Step>
+
+  <Step title="Transfer and run">
+    Follow the same steps as for the emulator:
+
+    ```bash
+    adb -d shell mkdir /data/local/tmp/dart
+    adb -d push out/android/ReleaseAndroidARM64/dart /data/local/tmp/dart/dart
+    adb -d push hello.dart /data/local/tmp/dart
+    adb -d shell /data/local/tmp/dart/dart /data/local/tmp/dart/hello.dart
+    ```
+
+    The `-d` flag tells adb to use the attached device instead of an emulator.
+  </Step>
+</Steps>
+
+### Multiple Devices
+
+If you have multiple devices or emulators connected, specify which one to use with the `-s` flag:
+
+```bash
+# List all devices
+adb devices
+
+# Use specific device
+adb -s emulator-5554 shell /data/local/tmp/dart/dart /data/local/tmp/dart/hello.dart
+adb -s TA23701VKR shell /data/local/tmp/dart/dart /data/local/tmp/dart/hello.dart
+```
+
+## Managing Emulators
+
+### List Running Emulators
+
+```bash
+adb devices
+```
+
+### Stop an Emulator
+
+<CodeGroup>
+  ```bash Single Emulator
+  adb emu kill
+  ```
+
+  ```bash Specific Emulator
+  adb -s emulator-5554 emu kill
+  ```
+</CodeGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Build fails with missing Android NDK">
+    Ensure you've configured and synced Android dependencies:
+
+    1. Add to `.gclient`:
+       ```python
+       "custom_vars": {
+         "download_android_deps": True,
+       },
+       ```
+
+    2. Run `gclient sync`
+  </Accordion>
+
+  <Accordion title="adb: command not found">
+    Add adb to your PATH:
+
+    ```bash
+    export PATH=$PATH:$(pwd)/third_party/android_tools/sdk/platform-tools
+    ```
+
+    Or use the full path:
+    ```bash
+    ./third_party/android_tools/sdk/platform-tools/adb devices
+    ```
+  </Accordion>
+
+  <Accordion title="adb: device unauthorized">
+    When connecting a device, check the device screen for an authorization prompt. Tap "Allow" to authorize the computer.
+
+    If the prompt doesn't appear:
+    1. Revoke USB debugging authorizations in Developer options
+    2. Disconnect and reconnect the USB cable
+    3. Accept the new authorization prompt
+  </Accordion>
+
+  <Accordion title="Emulator won't start">
+    Check that hardware acceleration is enabled:
+
+    ```bash
+    # Linux - check KVM
+    lsmod | grep kvm
+
+    # Mac - check Hypervisor Framework
+    sysctl kern.hv_support
+    ```
+
+    If KVM is not available on Linux:
+    ```bash
+    sudo apt install qemu-kvm
+    sudo adduser $USER kvm
+    # Log out and back in
+    ```
+  </Accordion>
+
+  <Accordion title="Permission denied on device">
+    The `/data/local/tmp/` directory should be writable without root. If you get permission errors:
+
+    1. Ensure USB debugging is enabled
+    2. Try using `adb root` (requires rooted device/emulator)
+    3. Use a different directory that your app owns
+  </Accordion>
+</AccordionGroup>
+
+## Advanced Usage
+
+### Running with Arguments
+
+Pass arguments to your Dart script:
+
+```bash
+adb shell /data/local/tmp/dart/dart /data/local/tmp/dart/script.dart arg1 arg2
+```
+
+### VM Flags
+
+Pass VM flags before the script path:
+
+```bash
+adb shell /data/local/tmp/dart/dart --enable-asserts /data/local/tmp/dart/script.dart
+```
+
+### Accessing Device Files
+
+Your Dart script can read files from the device:
+
+```dart
+import 'dart:io';
+
+void main() {
+  var file = File('/data/local/tmp/dart/data.txt');
+  print(file.readAsStringSync());
+}
+```
+
+Push the data file:
+```bash
+adb push data.txt /data/local/tmp/dart/
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="ARM/RISC-V Builds" icon="microchip" href="/building/for-arm-risc-v">
+    Cross-compile for ARM and RISC-V Linux
+  </Card>
+  <Card title="Testing" icon="flask" href="/testing">
+    Learn about testing the Dart SDK
+  </Card>
+</CardGroup>

@@ -1,0 +1,208 @@
+---
+title: Testing Requirements
+description: Learn about test requirements and how to manage tests across different Dart configurations
+---
+
+The Dart SDK has several tools, compilers, and runtimes that implement Dart in different ways. We must test all of them thoroughly while reusing tests across as many tools as we can.
+
+## The Challenge
+
+Dart tools sometimes vary in their behavior deliberately. Understanding these variations is crucial for writing effective tests.
+
+### Example: Number Equality
+
+```dart
+main() {
+  Expect.notEquals(1.0, 1);
+}
+```
+
+This test behaves differently across platforms:
+
+- **On the web** (dart2js and DDC): Numbers are represented using JavaScript numbers, which don't distinguish between integers and floating point numbers of the same value. This test "fails" - but that's the **intended behavior**
+- **On the VM**: Integers and doubles are distinct types, so the test passes
+
+### Configuration Variations
+
+Other times, behavior varies across different configurations of a single tool:
+
+- A test of the `assert()` statement will produce different outcomes in debug versus release mode
+- NNBD features require null safety to be enabled
+- Some features may only be available in specific runtime modes
+
+## Managing Test Variations
+
+We need a mechanism to define which tests are meaningful for which configurations.
+
+### Legacy Approach: Status Files
+
+Currently, we mostly express this in status files with entries that mark tests as `SkipByDesign` on some configurations:
+
+```
+# Status file entry
+some_test: SkipByDesign  # Wrong behavior for this configuration
+```
+
+This means: "This test specifies the wrong behavior for this configuration, so don't use it."
+
+<Note>
+We'd like to move away from status files over time in favor of the requirements system.
+</Note>
+
+## Test Requirements System
+
+The newer "requirements" system provides a better way to manage test variations. It was initially created for testing NNBD but can be extended for other needs.
+
+### How It Works
+
+<Steps>
+
+<Step title="Add requirements to test">
+A test can have a comment line starting with `Requirements=` followed by a comma-separated list of identifiers. Each identifier is the name of a "feature" that a Dart tool may support.
+
+```dart
+// Requirements=nnbd
+main() {
+  late var i = 3;
+  Expect.equals(3, i);
+}
+```
+</Step>
+
+<Step title="Test runner checks features">
+For any given configuration, the test runner knows which features that configuration supports.
+</Step>
+
+<Step title="Automatic skipping">
+When determining which tests to run, if a test requires a feature that the configuration does not support, the test is automatically skipped.
+</Step>
+
+</Steps>
+
+### Available Features
+
+The full set of features is defined in the Dart SDK repository:
+
+[View feature definitions](https://github.com/dart-lang/sdk/blob/main/pkg/test_runner/lib/src/feature.dart)
+
+### Example Usage
+
+**Single requirement:**
+```dart
+// Requirements=nnbd
+main() {
+  late var i = 3;
+  Expect.equals(3, i);
+}
+```
+
+**Multiple requirements:**
+```dart
+// Requirements=nnbd,strong-mode
+main() {
+  late String? name;
+  name = null;
+  Expect.isNull(name);
+}
+```
+
+## Writing Tests for Multiple Configurations
+
+When writing tests, consider:
+
+### 1. Platform Differences
+
+<CardGroup cols={2}>
+  <Card title="Web Platforms" icon="browser">
+    dart2js and DDC use JavaScript number representation
+  </Card>
+  <Card title="VM Platforms" icon="server">
+    Native VM has distinct integer and double types
+  </Card>
+</CardGroup>
+
+### 2. Mode Variations
+
+- **Debug mode**: Assertions are checked, additional runtime checks
+- **Release mode**: Assertions disabled, optimizations enabled
+- **Production mode**: Maximum optimizations
+
+### 3. Language Features
+
+- **NNBD**: Requires null safety to be enabled
+- **Strong mode**: Type checking variations
+- **Experimental features**: May require specific flags
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use requirements instead of status files">
+    When possible, use the `Requirements=` comment instead of adding entries to status files. This makes the test's constraints explicit and self-documenting.
+  </Accordion>
+
+  <Accordion title="Document why a test is platform-specific">
+    If a test only makes sense on certain platforms, add a comment explaining why:
+
+    ```dart
+    // Requirements=vm
+    // This test checks VM-specific int/double distinction
+    main() {
+      Expect.notEquals(1.0, 1);
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Test the intended behavior">
+    Write tests that verify the **intended** behavior for each configuration, not tests that will fail by design on some platforms.
+  </Accordion>
+
+  <Accordion title="Reuse tests when possible">
+    If a test can run on multiple configurations without modification, don't add unnecessary requirements. The goal is maximum test reuse.
+  </Accordion>
+</AccordionGroup>
+
+## Example: NNBD Test
+
+Here's a complete example of a test using the requirements system:
+
+```dart
+// Requirements=nnbd
+// Copyright (c) 2020, the Dart project authors. Please see the AUTHORS file
+// for details. All rights reserved. Use of this source code is governed by a
+// BSD-style license that can be found in the LICENSE file.
+
+import 'package:expect/expect.dart';
+
+main() {
+  // Test late variable initialization
+  late var i = 3;
+  Expect.equals(3, i);
+  
+  // Test nullable types
+  String? nullableString;
+  Expect.isNull(nullableString);
+  
+  nullableString = "Hello";
+  Expect.equals("Hello", nullableString);
+  
+  // Test non-nullable types
+  String nonNullable = "World";
+  Expect.equals("World", nonNullable);
+}
+```
+
+This test will:
+- ✓ Run on configurations with NNBD support
+- ✗ Be automatically skipped on configurations without NNBD support
+
+## Migration Path
+
+As we move forward:
+
+1. **New tests**: Use the `Requirements=` system from the start
+2. **Existing tests**: Gradually migrate from status files to requirements
+3. **Status files**: Will be phased out over time
+
+<Info>
+The requirements system provides better maintainability and makes test constraints explicit in the test file itself.
+</Info>

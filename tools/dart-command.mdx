@@ -1,0 +1,463 @@
+---
+title: 'dart Command'
+description: 'The Dart command-line interface (CLI) tool for development'
+icon: 'terminal'
+---
+
+The `dart` command-line tool is the primary interface for Dart development. It provides a unified entry point for running Dart programs, managing packages, analyzing code, and more.
+
+## Overview
+
+The `dart` tool consolidates various development tasks into a single command-line interface:
+
+```bash
+dart <command|dart-file> [arguments]
+```
+
+## Global Options
+
+These options apply to all `dart` commands:
+
+<CodeGroup>
+```bash Verbose Output
+dart -v <command>
+dart --verbose <command>
+```
+
+```bash Version Information
+dart --version
+```
+
+```bash Help
+dart -h
+dart --help
+dart help <command>
+```
+</CodeGroup>
+
+### Analytics Options
+
+```bash
+# Enable analytics
+dart --enable-analytics
+
+# Disable analytics
+dart --disable-analytics
+
+# Suppress analytics for a single run
+dart --suppress-analytics <command>
+```
+
+## Available Commands
+
+### analyze
+
+Analyze Dart code in a directory.
+
+```bash
+dart analyze [<directory>]
+```
+
+See the [Analyzer documentation](/tools/analyzer) for more details.
+
+### compile
+
+Compile Dart to various formats.
+
+```bash
+dart compile <subcommand> [arguments]
+```
+
+Subcommands:
+- `js` - Compile to JavaScript
+- `jit-snapshot` - Compile to JIT snapshot
+- `kernel` - Compile to kernel snapshot
+- `exe` - Compile to native executable
+- `aot-snapshot` - Compile to AOT snapshot
+- `wasm` - Compile to WebAssembly
+
+<CodeGroup>
+```bash Native Executable
+dart compile exe bin/main.dart -o build/app
+```
+
+```bash JavaScript
+dart compile js web/main.dart -o build/main.js
+```
+
+```bash JIT Snapshot
+dart compile jit-snapshot bin/main.dart
+```
+</CodeGroup>
+
+### create
+
+Create a new Dart project.
+
+```bash
+dart create [options] <directory>
+```
+
+<CodeGroup>
+```bash Console Application
+dart create my_app
+```
+
+```bash Package
+dart create --template=package my_package
+```
+
+```bash Web Application
+dart create --template=web my_web_app
+```
+</CodeGroup>
+
+Available templates:
+- `console` - A command-line application (default)
+- `package` - A package containing shared Dart libraries
+- `web` - A web application
+- `server-shelf` - A server app using package:shelf
+
+### devtools
+
+Open Dart DevTools for debugging and profiling.
+
+```bash
+dart devtools [options] [service-protocol-uri]
+```
+
+See the [DevTools documentation](/tools/devtools) for more details.
+
+### doc
+
+Generate API documentation for Dart projects.
+
+```bash
+dart doc [options] [<input directory>]
+```
+
+```bash
+# Generate documentation for the current package
+dart doc
+
+# Generate docs with a custom output directory
+dart doc --output=docs/api
+
+# Validate documentation without generating
+dart doc --validate-links
+```
+
+### fix
+
+Apply automated fixes to Dart source code.
+
+```bash
+dart fix [options] [<directory>]
+```
+
+<CodeGroup>
+```bash Dry Run
+# Show what fixes would be applied
+dart fix --dry-run
+```
+
+```bash Apply Fixes
+# Apply all available fixes
+dart fix --apply
+```
+</CodeGroup>
+
+### format
+
+Format Dart source code.
+
+```bash
+dart format [options] <files or directories>
+```
+
+See the [Formatter documentation](/tools/formatter) for more details.
+
+### info
+
+Show diagnostic information about the installed tooling.
+
+```bash
+dart info
+```
+
+Example output:
+```bash
+$ dart info
+
+General info:
+  Dart 3.5.0 (stable) (Mon Jul 8 13:45:56 2024 +0000) on "macos_arm64"
+  on macos / arm64
+  locale is en-US
+
+Process info:
+  memory: 15.2 MB
+  started at: 2024-07-08 10:30:15
+```
+
+### pub
+
+Work with packages using the Pub package manager.
+
+```bash
+dart pub <subcommand> [arguments]
+```
+
+See the [Pub documentation](/tools/pub) for more details.
+
+### run
+
+Run a Dart program.
+
+```bash
+dart run [vm-options] <dart-file>|<package>[:executable] [args]
+```
+
+<CodeGroup>
+```bash Local Script
+# Run a Dart script file
+dart run bin/main.dart
+
+# With arguments
+dart run bin/main.dart --verbose --port=8080
+```
+
+```bash Package Executable
+# Run a package executable
+dart run test
+
+# Run a specific executable from a package
+dart run build_runner:build
+```
+
+```bash Remote Package
+# Run the latest version from pub.dev
+dart run pubviz@
+
+# Run a specific version
+dart run pubviz@^4.0.0
+
+# Run from git
+dart run 'pubviz@{git: https://github.com/kevmoo/pubviz}'
+```
+</CodeGroup>
+
+#### VM Options
+
+You can pass VM options before the script name:
+
+```bash
+# Enable asserts
+dart run --enable-asserts bin/main.dart
+
+# Set observatory port
+dart run --observe=8181 bin/main.dart
+
+# Enable experiments
+dart run --enable-experiment=macros bin/main.dart
+```
+
+### test
+
+Run tests for a project.
+
+```bash
+dart test [options] [files or directories]
+```
+
+<CodeGroup>
+```bash All Tests
+# Run all tests
+dart test
+```
+
+```bash Specific Tests
+# Run specific test files
+dart test test/unit_test.dart
+
+# Run tests in a directory
+dart test test/integration/
+```
+
+```bash With Options
+# Run with coverage
+dart test --coverage=coverage
+
+# Run tests matching a pattern
+dart test --name="Integration"
+
+# Run with concurrency control
+dart test --concurrency=1
+```
+</CodeGroup>
+
+## Running Dart Programs
+
+You can run Dart programs directly without the `run` command:
+
+```bash
+# These are equivalent:
+dart bin/main.dart
+dart run bin/main.dart
+```
+
+## VM Flags
+
+When running Dart programs, you can pass flags to the VM:
+
+```bash
+# Enable asserts
+dart --enable-asserts bin/main.dart
+
+# Set heap size
+dart --old-gen-heap-size=2048 bin/main.dart
+
+# Enable observatory for debugging
+dart --observe=8181 bin/main.dart
+
+# List all VM options
+dart --help --verbose
+```
+
+## Experiments
+
+Enable experimental language features:
+
+```bash
+# Enable a single experiment
+dart --enable-experiment=macros run bin/main.dart
+
+# Enable multiple experiments
+dart --enable-experiment=macros,inline-class run bin/main.dart
+
+# List available experiments
+dart --enable-experiment=help
+```
+
+## Environment Variables
+
+### DART_VM_OPTIONS
+
+Set default VM options:
+
+```bash
+export DART_VM_OPTIONS="--enable-asserts --old-gen-heap-size=2048"
+dart bin/main.dart
+```
+
+### PUB_CACHE
+
+Set the location of the package cache:
+
+```bash
+export PUB_CACHE="$HOME/.pub-cache"
+```
+
+## Exit Codes
+
+The `dart` command uses the following exit codes:
+
+- `0` - Success
+- `64` - Usage error (invalid arguments)
+- `65` - Command-specific error
+- `254` - Compilation error or file not found
+- `255` - Unexpected error
+
+## Configuration Files
+
+### analysis_options.yaml
+
+Configure the analyzer and linter:
+
+```yaml
+analyzer:
+  exclude:
+    - build/**
+  errors:
+    unused_import: error
+
+linter:
+  rules:
+    - camel_case_types
+    - prefer_const_constructors
+```
+
+### pubspec.yaml
+
+Define package metadata and dependencies:
+
+```yaml
+name: my_app
+description: A sample Dart application
+version: 1.0.0
+
+environment:
+  sdk: ^3.0.0
+
+dependencies:
+  http: ^1.0.0
+
+dev_dependencies:
+  test: ^1.24.0
+```
+
+## Examples
+
+### Development Workflow
+
+```bash
+# Create a new project
+dart create my_app
+cd my_app
+
+# Get dependencies
+dart pub get
+
+# Analyze code
+dart analyze
+
+# Format code
+dart format .
+
+# Run tests
+dart test
+
+# Run the application
+dart run bin/my_app.dart
+
+# Compile to native executable
+dart compile exe bin/my_app.dart -o build/my_app
+```
+
+### Continuous Integration
+
+```bash
+#!/bin/bash
+# CI script
+
+# Install dependencies
+dart pub get
+
+# Verify formatting
+dart format --output=none --set-exit-if-changed .
+
+# Analyze code
+dart analyze --fatal-infos
+
+# Run tests with coverage
+dart test --coverage=coverage
+
+# Compile application
+dart compile exe bin/main.dart -o build/app
+```
+
+## See Also
+
+- [Analyzer](/tools/analyzer) - Static analysis tool
+- [Formatter](/tools/formatter) - Code formatting tool
+- [Pub](/tools/pub) - Package manager
+- [DevTools](/tools/devtools) - Debugging and profiling tools

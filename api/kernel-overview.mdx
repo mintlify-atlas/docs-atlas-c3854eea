@@ -1,0 +1,212 @@
+---
+title: Kernel Binary Format Overview
+description: Introduction to Dart Kernel, the intermediate representation used for compilation, analysis, and transformation
+---
+
+Dart Kernel is a small high-level intermediate language for Dart programs. It serves as a compact binary object-file format supporting separate compilation and linking, and provides infrastructure for whole-program analysis and transformations.
+
+## What is Kernel?
+
+Kernel is an intermediate representation (IR) that sits between Dart source code and the various execution backends (VM, dart2js, dart2native). It provides:
+
+- **Compact binary format** - Efficient serialization for fast loading and reduced file sizes
+- **Separate compilation** - Support for incremental compilation and linking
+- **Analysis infrastructure** - Foundation for whole-program optimizations
+- **Transformation support** - Enable compiler passes and code transformations
+
+## Binary Format Structure
+
+The kernel binary format uses the magic number `0x90ABCDEF` and includes:
+
+### ComponentFile Structure
+
+```scala
+type ComponentFile {
+  UInt32 magic = 0x90ABCDEF;
+  UInt32 formatVersion = 129;
+  Byte[10] shortSdkHash;
+  List<String> problemsAsJson;
+  Library[] libraries;
+  UriSource sourceMap;
+  List<Constant> constants;
+  RList<UInt32> constantsMapping;
+  List<CanonicalName> canonicalNames;
+  MetadataPayload[] metadataPayloads;
+  RList<MetadataMapping> metadataMappings;
+  StringTable strings;
+  ComponentIndex componentIndex;
+}
+```
+
+### Encoding Types
+
+The binary format uses several efficient encoding schemes:
+
+**Variable-length integers (UInt)**:
+- `UInt7` - 7-bit unsigned integer (0-127)
+- `UInt14` - 14-bit unsigned integer with tag bit
+- `UInt30` - 30-bit unsigned integer with tag bits
+- `UInt32` - 32-bit big-endian unsigned integer
+
+**String encoding**:
+- Strings are encoded as WTF-8 (a variant of UTF-8)
+- String table maps indices to end offsets in payload array
+- Efficient deduplication through string indexing
+
+## Component Structure
+
+A Kernel component is the top-level container that bundles libraries:
+
+```dart
+class Component extends TreeNode {
+  final CanonicalName root;
+  final List<Library> libraries;
+  final Map<Uri, Source> uriToSource;
+  Reference? mainMethodName;
+}
+```
+
+### Key Features
+
+**Canonical Names**: Unique identifiers for all declarations across the component. Enable fast reference resolution and linking.
+
+**Source Mapping**: Maps file URIs to source code and line-start tables for accurate error reporting and debugging.
+
+**Metadata Repositories**: Extensible mechanism for backends to attach custom metadata to AST nodes.
+
+## Libraries and Declarations
+
+Each library in a component contains:
+
+```scala
+type Library {
+  Byte flags (isSynthetic, nnbdModeBit1, nnbdModeBit2, isUnsupported);
+  UInt languageVersionMajor;
+  UInt languageVersionMinor;
+  CanonicalNameReference canonicalName;
+  StringReference name;
+  UriReference fileUri;
+  List<Expression> annotations;
+  List<LibraryDependency> libraryDependencies;
+  List<Typedef> typedefs;
+  List<Class> classes;
+  List<Extension> extensions;
+  List<ExtensionTypeDeclaration> extensionTypeDeclarations;
+  List<Field> fields;
+  List<Procedure> procedures;
+}
+```
+
+## File Offsets and Source Locations
+
+Kernel maintains source location information:
+
+```scala
+type FileOffset {
+  // Encoded as offset + 1 to accommodate -1 indicating no offset
+  UInt fileOffset;
+}
+```
+
+This enables:
+- Precise error reporting
+- IDE navigation and debugging
+- Source-level transformations
+
+## Component Index
+
+The component index provides semi-random access to component sections:
+
+```scala
+type ComponentIndex {
+  Byte[] 8bitAlignment;
+  UInt32 binaryOffsetForSourceTable;
+  UInt32 binaryOffsetForConstantTable;
+  UInt32 binaryOffsetForConstantTableIndex;
+  UInt32 binaryOffsetForCanonicalNames;
+  UInt32 binaryOffsetForMetadataPayloads;
+  UInt32 binaryOffsetForMetadataMappings;
+  UInt32 binaryOffsetForStringTable;
+  UInt32 binaryOffsetForStartOfComponentIndex;
+  UInt32 mainMethodReference;
+  UInt32[libraryCount + 1] libraryOffsets;
+  UInt32 libraryCount;
+  UInt32 componentFileSizeInBytes;
+}
+```
+
+By reading the last 4 bytes, you can determine the library count and skip to any section.
+
+## Usage in the Dart SDK
+
+Kernel is used throughout the Dart toolchain:
+
+**Frontend (CFE)**: Compiles Dart source to kernel format
+- Performs parsing, type checking, and inference
+- Generates `.dill` files (kernel binary)
+
+**VM**: Loads kernel directly for execution
+- Skips parsing and type checking
+- Faster startup compared to source compilation
+
+**dart2js**: Consumes kernel for web compilation
+- Benefits from shared frontend
+- Consistent semantics across platforms
+
+**dart2native**: Uses kernel for AOT compilation
+- Enables whole-program optimizations
+- Platform-specific code generation
+
+## Working with Kernel
+
+To read kernel files in Dart:
+
+```dart
+import 'package:kernel/kernel.dart';
+import 'package:kernel/binary/ast_from_binary.dart';
+import 'dart:io';
+
+void loadKernel(String path) {
+  final bytes = File(path).readAsBytesSync();
+  final component = loadComponentFromBytes(bytes);
+  
+  print('Libraries: ${component.libraries.length}');
+  for (var library in component.libraries) {
+    print('  ${library.name} (${library.importUri})');
+  }
+}
+```
+
+To write kernel files:
+
+```dart
+import 'package:kernel/binary/ast_to_binary.dart';
+
+void writeKernel(Component component, String path) {
+  final sink = File(path).openWrite();
+  final printer = BinaryPrinter(sink);
+  printer.writeComponentFile(component);
+  sink.close();
+}
+```
+
+## Format Versioning
+
+The current format version is `129`. Version changes when:
+- AST node structure changes
+- Encoding schemes are modified
+- New features are added
+
+The SDK verifies version compatibility when loading kernel files.
+
+## Related Topics
+
+- [Kernel AST Structure](/api/kernel-ast) - Detailed AST node types
+- [Kernel Transformations](/api/kernel-transformations) - Transformation infrastructure
+- [Type System](/Kernel-Type-System) - Kernel type representation
+- [Operational Semantics](/Kernel-Operational-Semantics) - Execution model
+
+## References
+
+- [Binary Format Specification](https://github.com/dart-lang/sdk/blob/main/pkg/kernel/binary.md)
+- [pkg/kernel](https://github.com/dart-lang/sdk/tree/main/pkg/kernel) - Kernel package source

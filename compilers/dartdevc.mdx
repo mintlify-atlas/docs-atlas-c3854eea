@@ -1,0 +1,434 @@
+---
+title: dartdevc - Dart Dev Compiler
+description: Fast, modular JavaScript compiler for Dart web development
+---
+
+The Dart Dev Compiler (DDC) is a fast, modular compiler that generates modern JavaScript (ES6) for development. It's optimized for quick incremental compilation and debugging, making it ideal for iterative web development.
+
+## Overview
+
+Dartdevc prioritizes developer experience over production optimization:
+
+- **Fast incremental compilation** - Rebuild only changed modules
+- **Readable output** - ES6 JavaScript that resembles the original Dart
+- **Source maps** - Precise mapping for debugging
+- **Modular architecture** - Compile libraries independently
+
+**Important:** DDC is meant to be used by build systems, not directly by developers. Use `webdev serve` or `build_web_compilers` instead of invoking dartdevc manually.
+
+## How It Works
+
+### Modular Compilation
+
+Unlike dart2js which requires the entire application, DDC operates modularly:
+
+```
+╭─────────────╮     ╭──────────────╮     ╭──────────────╮
+│ Library A   │────▶│ Summary A    │────▶│ Module A.js  │
+╰─────────────╯     ╰──────────────╯     ╰──────────────╯
+                           │                      │
+╭─────────────╮            │              ╭──────────────╮
+│ Library B   │────────────┼─────────────▶│ Module B.js  │
+╰─────────────╯            │              ╰──────────────╯
+                           ▼
+╭─────────────╮     ╭──────────────╮     ╭──────────────╮
+│ Library C   │────▶│ Summary C    │────▶│ Module C.js  │
+╰─────────────╯     ╰──────────────╯     ╰──────────────╯
+```
+
+Each module:
+1. Takes a set of Dart source files
+2. Receives summaries of dependencies
+3. Performs modular type checking
+4. Generates a single JavaScript module
+
+### Representation
+
+DDC maps Dart concepts to ES6 naturally:
+
+<Tabs>
+  <Tab title="Classes">
+    Dart classes map to ES6 classes:
+    
+    ```dart
+    // Dart
+    class Dog {
+      String name;
+      Dog(this.name);
+      void bark() => print('$name says woof!');
+    }
+    ```
+    
+    ```javascript
+    // Generated JavaScript (simplified)
+    class Dog {
+      constructor(name) {
+        this.name = name;
+      }
+      bark() {
+        print(`${this.name} says woof!`);
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Generics">
+    Generics are reified (preserved at runtime):
+    
+    ```dart
+    // Dart
+    List<String> names = ['Alice', 'Bob'];
+    ```
+    
+    ```javascript
+    // Generated JavaScript (conceptual)
+    let names = List$(String)(['Alice', 'Bob']);
+    ```
+    
+    Generic classes become factories that produce specialized classes.
+  </Tab>
+  
+  <Tab title="Libraries">
+    Libraries become first-class objects:
+    
+    ```dart
+    // Dart - lib/utils.dart
+    library utils;
+    
+    String greet(String name) => 'Hello, $name';
+    const version = '1.0.0';
+    ```
+    
+    ```javascript
+    // Generated JavaScript (conceptual)
+    let utils = {
+      greet: function(name) { return `Hello, ${name}`; },
+      version: '1.0.0'
+    };
+    ```
+  </Tab>
+  
+  <Tab title="Private Members">
+    Private members use ES6 symbols:
+    
+    ```dart
+    // Dart
+    class Account {
+      final String _id;
+      Account(this._id);
+    }
+    ```
+    
+    ```javascript
+    // Generated JavaScript (conceptual)
+    const _id = Symbol('_id');
+    
+    class Account {
+      constructor(id) {
+        this[_id] = id;
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Using DDC
+
+### With webdev (Recommended)
+
+The standard way to use DDC:
+
+```bash
+# Start development server with hot reload
+webdev serve
+
+# Serve on specific port
+webdev serve web:8080
+
+# Build development output
+webdev build --no-release
+```
+
+### With build_web_compilers
+
+For custom build configurations:
+
+```yaml
+# pubspec.yaml
+dev_dependencies:
+  build_runner: ^2.4.0
+  build_web_compilers: ^4.0.0
+```
+
+```bash
+# Run development build
+dart run build_runner serve
+
+# Build once
+dart run build_runner build --config debug
+```
+
+### Direct Invocation (Advanced)
+
+**Not recommended** for application development:
+
+```bash
+# Generate a single module
+dart run dev_compiler:dartdevc \
+  --modules=amd \
+  --summary=summaries/core.sum \
+  --out=output.js \
+  lib/main.dart
+```
+
+## Development Workflow
+
+### Fast Incremental Builds
+
+DDC shines during development with minimal rebuild times:
+
+1. **Initial build** - Compile all modules (~seconds)
+2. **Change a file** - Recompile only affected modules (~milliseconds)
+3. **Hot reload** - Browser updates without full page refresh
+
+```bash
+# Start dev server
+webdev serve
+
+# Edit source files
+# Browser automatically reloads changed modules
+```
+
+### Debugging
+
+DDC generates high-quality source maps:
+
+```javascript
+// Set breakpoints directly in Dart source
+// Browser DevTools show:
+//   - Dart variable names
+//   - Dart types
+//   - Dart source lines
+```
+
+**Chrome DevTools:**
+1. Open DevTools (F12)
+2. Navigate to Sources tab
+3. Browse to `lib/` to see Dart sources
+4. Set breakpoints and inspect variables
+
+### Type Checking
+
+DDC performs strict type checking during compilation:
+
+```dart
+// This will cause a compile error in DDC
+void main() {
+  String name = 42; // Error: A value of type 'int' can't be assigned
+}
+```
+
+Use strong mode for best results:
+
+```yaml
+# analysis_options.yaml
+analyzer:
+  strong-mode:
+    implicit-casts: false
+    implicit-dynamic: false
+```
+
+## Performance Characteristics
+
+### Compilation Speed
+
+<Tabs>
+  <Tab title="Initial Build">
+    First compilation of entire app:
+    
+    - Small app (< 1000 LOC): 1-3 seconds
+    - Medium app (< 10k LOC): 5-15 seconds  
+    - Large app (> 10k LOC): 15-60 seconds
+  </Tab>
+  
+  <Tab title="Incremental Build">
+    Recompiling after changes:
+    
+    - Single file change: 100-500ms
+    - Module change: 500-2000ms
+    - Dependency change: 2-10 seconds
+    
+    Much faster than dart2js!
+  </Tab>
+</Tabs>
+
+### Runtime Performance
+
+- **Startup:** Slower than dart2js (no tree-shaking)
+- **Execution:** Comparable to hand-written JavaScript
+- **Bundle size:** Larger than dart2js (includes unused code)
+
+**Use DDC for development, dart2js for production.**
+
+## Module Systems
+
+DDC supports multiple JavaScript module formats:
+
+### AMD (Default)
+
+```bash
+dartdevc --modules=amd -o output.js input.dart
+```
+
+Use with RequireJS loader.
+
+### ES6
+
+```bash
+dartdevc --modules=es6 -o output.js input.dart
+```
+
+Use with native ES6 module imports.
+
+### CommonJS
+
+```bash
+dartdevc --modules=common -o output.js input.dart
+```
+
+Use with Node.js or Browserify.
+
+## Browser Support
+
+DDC generates ES6, requiring modern browsers:
+
+- **Chrome:** Latest stable (recommended)
+- **Firefox:** Latest stable
+- **Safari:** Latest stable
+- **Edge:** Chromium-based versions
+
+**Note:** DDC output is not transpiled to ES5. For older browser support, use dart2js instead.
+
+## Comparison with dart2js
+
+| Feature | dartdevc | dart2js |
+|---------|----------|----------|
+| **Purpose** | Development | Production |
+| **Compilation speed** | Very fast | Slow |
+| **Incremental builds** | Yes | No |
+| **Output size** | Large | Small |
+| **Tree-shaking** | No | Yes |
+| **Minification** | No | Yes |
+| **Source maps** | Excellent | Good |
+| **Readability** | High | Low (minified) |
+| **Runtime performance** | Good | Excellent |
+| **Browser support** | Modern only | All browsers |
+
+## Limitations
+
+### Stability Warning
+
+**The DDC output format is not stable.** Do not rely on:
+- Generated JavaScript structure
+- Naming conventions  
+- Module boundaries
+- Internal APIs
+
+These may change between Dart SDK versions.
+
+### Not for Production
+
+DDC is **not recommended** for production deployment:
+
+- No tree-shaking (includes all code)
+- No minification (larger downloads)
+- No advanced optimizations
+- Modern browser requirement
+
+Always use dart2js for production builds.
+
+### Not for JavaScript Export
+
+Do **not** use DDC to create JavaScript libraries:
+
+```dart
+// ❌ Don't do this
+// Expose Dart code as JavaScript API via DDC
+```
+
+Instead:
+- Use `dart compile js` with explicit JS interop
+- Define stable APIs using `dart:js_interop`
+
+## Configuration
+
+### Build Configuration
+
+```yaml
+# build.yaml
+targets:
+  $default:
+    builders:
+      build_web_compilers|entrypoint:
+        options:
+          compiler: dartdevc
+          dart2js_args:
+            - --no-minify
+```
+
+### Analysis Options
+
+```yaml
+# analysis_options.yaml
+analyzer:
+  strong-mode:
+    implicit-casts: false  # Catch type errors early
+  errors:
+    unused_import: warning
+    dead_code: info
+```
+
+## Troubleshooting
+
+### Slow Incremental Builds
+
+If rebuilds are slow:
+
+1. Check for circular dependencies
+2. Split large libraries into smaller modules
+3. Use `--verbose` to identify bottlenecks
+
+```bash
+webdev serve --verbose
+```
+
+### Module Loading Errors
+
+If modules fail to load:
+
+1. Clear build cache: `webdev clean`
+2. Rebuild: `webdev build --no-release`
+3. Check browser console for errors
+
+### Type Errors
+
+DDC catches errors dart2js might miss:
+
+```dart
+// DDC error, dart2js might allow
+dynamic x = 'hello';
+int y = x; // Error in DDC
+```
+
+Fix by being explicit:
+
+```dart
+int y = x as int; // Explicit cast
+```
+
+## Related Resources
+
+- [dartdevc source code](https://github.com/dart-lang/sdk/tree/main/pkg/dev_compiler)
+- [webdev tool](https://dart.dev/tools/webdev)
+- [build_web_compilers](https://pub.dev/packages/build_web_compilers)
+- [Strong mode guide](https://dart.dev/guides/language/type-system)

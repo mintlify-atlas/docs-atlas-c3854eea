@@ -1,0 +1,222 @@
+---
+title: Dart VM Architecture
+description: Comprehensive overview of the Dart Virtual Machine components and architecture
+---
+
+## What is the Dart VM?
+
+The Dart VM is a collection of components for executing Dart code natively. Despite its name, the Dart VM is not strictly a "virtual machine" in the traditional sense - it provides an execution environment for Dart but doesn't always interpret or JIT-compile code. For instance, Dart code can be AOT-compiled to machine code and executed in a stripped-down runtime without any compiler components.
+
+<Note>
+The name "Dart VM" is historical. While it provides an execution environment for a high-level programming language, it doesn't imply that Dart is always interpreted or JIT-compiled.
+</Note>
+
+## Core Components
+
+The Dart VM includes the following major components:
+
+### Runtime System
+
+- **Object Model** - Defines how Dart objects are represented in memory
+- **Garbage Collection** - Automatic memory management for the heap
+- **Snapshots** - Serialization mechanism for VM state
+
+### Development Experience
+
+Components accessible via the service protocol:
+
+- **Debugging** - Interactive debugging support
+- **Profiling** - Performance analysis tools
+- **Hot-reload** - Fast incremental code updates during development
+
+### Compilation Pipelines
+
+- **Just-in-Time (JIT)** - Compiles code during execution
+- **Ahead-of-Time (AOT)** - Pre-compiles code before execution
+- **Interpreter** - Bytecode execution for platforms with restrictions
+- **ARM simulators** - Testing infrastructure
+
+### Core Libraries
+
+Native method implementations for Dart's core libraries (`dart:core`, `dart:async`, etc.)
+
+## Execution Modes
+
+The Dart VM can execute code in several ways:
+
+1. **From source or Kernel binary using JIT**
+2. **From snapshots:**
+   - AOT snapshot (ahead-of-time compiled)
+   - AppJIT snapshot (JIT-compiled during training run)
+
+<Info>
+The main difference between these modes lies in **when and how** the VM converts Dart source code to executable code. The runtime environment that facilitates execution remains the same across all modes.
+</Info>
+
+## Isolates and Isolate Groups
+
+All Dart code runs within **isolates** - isolated Dart universes with their own global state and thread of control.
+
+```
+                    pseudo isolate for
+                    shared immutable objects
+                    like null, true, false.
+                    ┌────────────┐
+                    │ VM Isolate │       heaps can reference
+                    │ ╭────────╮ │       vm-isolate heap.
+           ┏━━━━━━━━━▶│ Heap   │◀━━━━━━━━━━━━━━━━┓
+           ┃        │ ╰────────╯ │               ┃
+           ┃        └────────────┘               ┃
+           ┃                                     ┃
+┌──────────┃─────────┐            ┌──────────────┃──────────┐
+│ IsolateGroup        │            │ IsolateGroup ┃          │
+│                     │            │              ┃          │
+│ ╭───────────────────┃──────╮     │ ╭────────────┃────────╮ │
+│ │ GC managed Heap          │     │ │ GC managed Heap     │ │
+│ ╰──────────────────────────╯     │ ╰─────────────────────╯ │
+│  ┌─────────┐     ┌─────────┐     │  ┌─────────┐ ┌────────┐│
+│  │ Isolate │     │ helper  │     │  │ Isolate │ │ helper ││
+│  │ globals │     │ thread  │     │  │ globals │ │ thread ││
+│  │ mutator │     │         │     │  │ mutator │ │        ││
+│  │ thread  │     │         │     │  │ thread  │ │        ││
+│  └─────────┘     └─────────┘     │  └─────────┘ └────────┘│
+└──────────────────────────────────┘  └─────────────────────┘
+```
+
+### Key Characteristics
+
+- **Isolation**: Each isolate has its own global state and cannot share mutable state with other isolates
+- **Message Passing**: Isolates communicate through message passing via ports
+- **Isolate Groups**: Isolates within a group share the same garbage-collected heap
+- **Thread Model**: An OS thread can enter only one isolate at a time, and only one mutator thread can execute per isolate
+
+<Note>
+Isolates within a group share the same Dart program. `Isolate.spawn` creates an isolate within the same group, while `Isolate.spawnUri` starts a new group.
+</Note>
+
+### Helper Threads
+
+In addition to the mutator thread, isolates can have helper threads:
+
+- Background JIT compiler thread
+- GC sweeper threads
+- Concurrent GC marker threads
+
+## Thread Pool Architecture
+
+The VM uses a thread pool (`dart::ThreadPool`) to manage OS threads efficiently. Code is structured around task concepts (`dart::ThreadPool::Task`) rather than explicit OS threads.
+
+For example:
+- `dart::ConcurrentSweeperTask` - Posted to thread pool for background GC sweeping
+- `dart::MessageHandlerTask` - Posted when new messages arrive for isolate message processing
+
+<Info>
+The default implementation of an isolate's event loop doesn't spawn a dedicated thread. Instead, it posts a `MessageHandlerTask` to the thread pool whenever a new message arrives.
+</Info>
+
+## From Source to Execution
+
+When you run a Dart program from source:
+
+```dart
+// hello.dart
+main() => print('Hello, World!');
+```
+
+```console
+$ dart hello.dart
+Hello, World!
+```
+
+The VM performs these steps:
+
+1. **Common Front-End (CFE)** translates Dart source to Kernel AST
+2. **Kernel binary** (`.dill` file) is created containing serialized AST
+3. **VM** loads and executes the Kernel binary
+
+```
+╭─────────────╮                       ╭────────────╮
+│╭─────────────╮       ╔═════╗        │╭────────────╮        ╔════╗
+││╭─────────────╮┣━━━▶ ║ CFE ║ ┣━━━▶  ││╭────────────╮ ┣━━━▶ ║ VM ║
+┆││ Dart Source │      ╚═════╝        │││ Kernel AST │       ╚════╝
+┆┆│             │                     ╰││ (binary)   │
+ ┆┆             ┆                      ╰│            │
+  ┆             ┆                       ╰────────────╯
+```
+
+<Note>
+Since Dart 2, the VM no longer executes raw Dart source directly. It requires Kernel binaries (`.dill` files) containing serialized Kernel AST.
+</Note>
+
+## Kernel Service
+
+The standalone `dart` executable includes a **kernel service** isolate that handles compilation:
+
+```
+                   ┌─────────────────────────────────┐
+                   │ dart (cli)                      │
+                   │  ┌─────────┐      ┌───────────┐ │
+╭─────────────╮    │  │ kernel  │      │   main    │ │
+│╭─────────────╮   │  │ service │      │  isolate  │ │
+││╭─────────────╮┣━━━▶│ isolate │┣━━━▶ │           │ │
+┆││ Dart Source │  │  │         │      │           │ │
+┆┆│             │  │  │╔══════╗ │      │           │ │
+ ┆┆             ┆  │  │║ CFE  ║ │      │           │ │
+  ┆             ┆  │  │╚══════╝ │      │           │ │
+                   │  └─────────┘      └───────────┘ │
+                   └─────────────────────────────────┘
+```
+
+This allows convenient execution from source while maintaining the Kernel-based architecture.
+
+## Object Representation
+
+VM objects are split into two parts:
+
+- **`Xyz` class** (in `runtime/vm/object.h`) - Defines C++ methods
+- **`UntaggedXyz` class** (in `runtime/vm/raw_object.h`) - Defines memory layout
+
+For example:
+- `dart::Class` and `dart::UntaggedClass` represent a Dart class
+- `dart::Field` and `dart::UntaggedField` represent a field within a class
+- `dart::Function` and `dart::UntaggedFunction` represent a function
+
+## Lazy Loading from Kernel
+
+When a Kernel binary is loaded, the VM creates objects lazily:
+
+```
+            KERNEL AST BINARY    ┆ ISOLATE GROUP HEAP
+                                 ┆
+             ╭─────────────────╮ ┆   ┌───────┐
+             │                 │ ┆ ┏━┥ Class │
+             ├─────────────────┤ ┆ ┃ └───────┘
+AST node     │(Class           │◀━━┛
+representing │ (Field)         │ ┆   ┌───────┐
+a class      │ (Procedure      │ ┆ ┏━┥ Class │
+             │  (FunctionNode))│ ┆ ┃ └───────┘
+             │ (Procedure      │ ┆ ┃
+             │  (FunctionNode))│ ┆ ┃
+             ├─────────────────┤ ┆ ┃
+             │(Class           │◀━━┛
+             │ (Field)         │ ┆
+             ├─────────────────┤ ┆
+```
+
+- Basic class/library information is loaded first
+- Full class details are deserialized only when needed
+- Function bodies remain serialized until compilation
+
+This lazy approach minimizes startup time and memory usage.
+
+## Summary
+
+The Dart VM provides a sophisticated runtime environment with:
+
+- Multiple execution modes (JIT, AOT, snapshots)
+- Isolated execution contexts (isolates and isolate groups)
+- Efficient thread management via thread pools
+- Lazy loading for fast startup
+- A modular architecture supporting different deployment scenarios
+
+Understanding the VM architecture is essential for optimizing Dart application performance and troubleshooting runtime issues.

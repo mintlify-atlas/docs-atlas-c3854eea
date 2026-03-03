@@ -1,0 +1,269 @@
+---
+title: Testing the Dart SDK
+description: Learn how to run tests for the Dart SDK across different configurations and platforms
+---
+
+The Dart SDK uses automated tests to ensure reliability across all supported tools, platforms, and configurations. This page explains how to work with the test suite and test runner.
+
+## Overview
+
+The SDK test suite is extensive:
+
+- **25,329+** test files in `tests/` directory
+- **1.5+ million** lines of test code
+- **95,000+** individual assertions
+- **476** supported configurations
+
+Tests validate behavior across multiple compilers (VM, dart2js, DDC), runtimes, and platforms.
+
+## Key Concepts
+
+### Test Runner
+
+The test runner (`test.py` or `test.dart`) executes tests across configurations. It lives at `pkg/test_runner`.
+
+### Test Suites
+
+Collections of test files, typically corresponding to top-level directories in `tests/`:
+
+- `language` - Language feature tests
+- `lib` - Core library tests  
+- `co19` - Conformance tests
+
+<Note>
+Directories with `_2` suffix contain pre-null-safety tests (legacy from Dart 1.0 to 2.0 migration).
+</Note>
+
+### Configurations
+
+A specific combination of tools and options, such as:
+
+- "Run on VM on Linux in debug mode"
+- "Compile with DDC and run in Chrome"
+- "Analyze using analyzer with asserts enabled"
+
+Configurations are defined in `tools/bots/test_matrix.json`.
+
+### Test Outcomes
+
+**Expectation**: What a human author says the tool should do (from test code comments)
+
+**Outcome**: The actual observed behavior when running the test
+
+**Status**: Previously recorded behavior from the results database
+
+<Warning>
+A test "passes" when the tool's behavior matches what was previously recorded, NOT necessarily when it runs without errors. This helps detect unexpected behavior changes.
+</Warning>
+
+## Running Tests Locally
+
+### Using test.dart (Recommended)
+
+The modern entrypoint that reads status from the results database:
+
+```bash
+./tools/sdks/dart-sdk/bin/dart tools/test.dart -n analyzer-asserts-mac
+```
+
+### Using test.py (Legacy)
+
+The older entrypoint using status files:
+
+```bash
+./tools/test.py -n analyzer-mac language/spread_collections
+```
+
+<Note>
+The `test.py` approach is deprecated and may show spurious failures due to outdated status files.
+</Note>
+
+### Finding Configurations
+
+Use `--find-configurations` to discover available configurations:
+
+```bash
+./tools/sdks/dart-sdk/bin/dart tools/test.dart --find-configurations \
+  --compiler=dart2js --runtime=chrome
+```
+
+Filter options:
+
+- `-m, --mode` - Release or debug mode
+- `-c, --compiler` - Compiler to use (dart2js, dartdevc, etc.)
+- `-r, --runtime` - Runtime environment (vm, chrome, d8, etc.)
+- `-a, --arch` - Architecture (x64, arm64, etc.)
+- `-s, --system` - OS (linux, macos, windows)
+
+### Local vs Bot Configurations
+
+Run a bot configuration locally with a different platform config:
+
+```bash
+# Use Linux results but run Mac configuration
+./tools/sdks/dart-sdk/bin/dart tools/test.dart \
+  -n analyzer-asserts-linux \
+  -N analyzer-asserts-mac
+```
+
+- `-n` (lowercase): Configuration for results lookup
+- `-N` (uppercase): Configuration to run locally
+
+## Testing Different Components
+
+### VM Tests
+
+<Steps>
+  <Step title="Build the VM">
+    ```bash
+    ./tools/build.py -m all runtime
+    ```
+  </Step>
+  
+  <Step title="Run tests">
+    ```bash
+    ./tools/test.py -m all
+    ./tools/test.py -m all --checked
+    ```
+  </Step>
+</Steps>
+
+### dart2js Tests
+
+<Steps>
+  <Step title="Build dart2js">
+    ```bash
+    ./tools/build.py -m release dart2js_bot
+    ```
+  </Step>
+  
+  <Step title="Run basic tests">
+    ```bash
+    ./tools/test.py -mrelease --use-sdk --time -pcolor --report \
+      --enable-asserts dart2js utils
+    ```
+  </Step>
+  
+  <Step title="Run dart2js-specific tests">
+    ```bash
+    ./tools/test.py -mrelease -cdart2js -rd8 --time -pcolor --report \
+      --host-checked dart2js_extra dart2js_native
+    ```
+  </Step>
+  
+  <Step title="Run in browsers">
+    ```bash
+    ./tools/test.py -mrelease -cdart2js -rd8,drt --use-sdk \
+      --time -pcolor --report
+    ```
+  </Step>
+</Steps>
+
+### Precompilation Tests
+
+```bash
+# Build precompiled runtime
+./tools/build.py -mrelease runtime_precompiled
+
+# Run precompilation tests
+./tools/test.py -mrelease -cprecompiler -rdart_precompiled
+```
+
+### App Snapshot Tests
+
+```bash
+./tools/build.py -mall runtime
+./tools/test.py -mall -capp_jit
+```
+
+## Writing Tests
+
+### Basic Tests
+
+Simple tests use the `expect` package:
+
+```dart
+import 'package:expect/expect.dart';
+
+main() {
+  Expect.equals(3, 1 + 2);
+}
+```
+
+### Runtime Error Tests
+
+```dart
+import 'package:expect/expect.dart';
+
+main() {
+  var list = [0, 1];
+  Expect.throwsRangeError(() {
+    list[2];
+  });
+}
+```
+
+### Static Error Tests
+
+Test compile-time errors with error expectation comments:
+
+```dart
+class A {
+//    ^
+// [cfe] The non-abstract class 'A' is missing implementations.
+  foo();
+//^^^^^^
+// [analyzer] STATIC_WARNING.CONCRETE_CLASS_WITH_ABSTRACT_MEMBER
+
+  static bar();
+//            ^
+// [analyzer] SYNTACTIC_ERROR.MISSING_FUNCTION_BODY
+// [cfe] Expected a function body or '=>'.
+}
+```
+
+#### Error Expectation Syntax
+
+- Carets (`^`) mark error location and length
+- `[analyzer]` lines specify analyzer error codes
+- `[cfe]` lines specify CFE error messages
+- Omit either for front-end-specific errors
+
+#### Updating Static Error Tests
+
+Automatically update error expectations:
+
+```bash
+dart pkg/test_runner/tool/update_static_error_tests.dart \
+  -u "**/abstract_syntax_test.dart"
+```
+
+This tool can insert, remove, or update error expectations based on actual compiler output.
+
+## Viewing Test Results
+
+### Current Results App
+
+View current test status with filtering:
+
+[https://dart-current-results.web.app/](https://dart-current-results.web.app/)
+
+### Results Feed
+
+See recent status changes and unapproved results:
+
+[https://dart-ci.firebaseapp.com/](https://dart-ci.firebaseapp.com/)
+
+## Commit Queue and Bots
+
+When you submit a code review:
+
+1. **Trybots** run a subset of configurations on the commit queue
+2. Tests must "pass" (behavior unchanged from previous runs)
+3. **Approve** any intentional status changes
+4. After landing, **all bots** run the full test suite
+5. Address any failures by approving changes, reverting, or fixing
+
+<Note>
+A test failure means the behavior CHANGED, not necessarily that it's broken. When fixing bugs, status changes are expected and must be approved.
+</Note>

@@ -1,0 +1,82 @@
+---
+title: Core Libraries Overview
+description: Overview of Dart's core libraries for common programming tasks
+---
+
+Dart provides a rich set of core libraries that offer essential functionality for common programming tasks. These libraries are automatically available to all Dart programs and provide the foundation for building robust applications.
+
+## Library Categories
+
+Dart's core libraries can be grouped into several categories:
+
+### Essential Libraries
+
+**dart:core** - Automatically imported into every Dart program. Provides built-in types, collections, and other fundamental functionality.
+
+**dart:async** - Support for asynchronous programming with classes such as Future and Stream.
+
+### Platform-Specific Libraries
+
+**dart:io** - File, socket, HTTP, and other I/O support for non-web applications (servers, CLI apps, Flutter).
+
+**dart:html** - HTML elements and other resources for web-based applications.
+
+### Specialized Libraries
+
+**dart:ffi** - Foreign Function Interface for interoperability with the C programming language.
+
+**dart:isolate** - Concurrent programming using isolates: independent workers similar to threads.
+
+## Platform Availability
+
+<Note>
+Not all libraries are available on all platforms:
+- **dart:io**, **dart:ffi**, and **dart:isolate** are only available on Dart Native (VM, AOT, and Flutter)
+- **dart:html** is only available on web platforms
+- **dart:core** and **dart:async** are available on all platforms
+</Note>
+
+## Import Syntax
+
+Most core libraries need to be explicitly imported, except for `dart:core` which is automatically imported:
+
+```dart
+// dart:core is automatically imported
+// No import needed for String, int, List, etc.
+
+// Other libraries must be imported
+import 'dart:async';
+import 'dart:io';
+import 'dart:ffi';
+```
+
+## Common Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Asynchronous Operations" icon="clock">
+    Use `dart:async` for Futures, Streams, and async/await patterns
+  </Card>
+  
+  <Card title="File I/O" icon="file">
+    Use `dart:io` for reading/writing files and directories
+  </Card>
+  
+  <Card title="Native Interop" icon="link">
+    Use `dart:ffi` for calling C libraries and native code
+  </Card>
+  
+  <Card title="Parallel Execution" icon="layer-group">
+    Use `dart:isolate` for CPU-intensive tasks in separate isolates
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+Explore each library in detail:
+
+- [dart:core](/libraries/dart-core) - Built-in types and collections
+- [dart:async](/libraries/dart-async) - Asynchronous programming
+- [dart:io](/libraries/dart-io) - I/O for non-web apps
+- [dart:ffi](/libraries/dart-ffi) - C interoperability
+- [dart:html](/libraries/dart-html) - Web programming
+- [dart:isolate](/libraries/dart-isolate) - Concurrent programming

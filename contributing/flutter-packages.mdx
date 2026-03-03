@@ -1,0 +1,84 @@
+---
+title: Flutter Pinned Packages
+description: Understanding and working with packages pinned by the Flutter SDK
+---
+
+## What Are Flutter Pinned Packages?
+
+Flutter pinned packages are a set of packages that are pinned by the Flutter SDK to specific versions. Some examples include:
+
+- `package:characters` (pinned by `package:flutter`)
+- `package:collection` (pinned by `package:flutter`)
+- `package:path` (pinned by `package:flutter_test`)
+
+### Current List of Pinned Packages
+
+To see the current list of pinned packages of the Flutter SDK at head, check the `dependencies` section of the following pubspecs:
+
+- [flutter/pubspec.yaml](https://github.com/flutter/flutter/blob/main/packages/flutter/pubspec.yaml)
+- [flutter_test/pubspec.yaml](https://github.com/flutter/flutter/blob/main/packages/flutter_test/pubspec.yaml)
+- [flutter_localizations/pubspec.yaml](https://github.com/flutter/flutter/blob/main/packages/flutter_localizations/pubspec.yaml)
+
+<Note>
+If you're not using one of the above packages (e.g., `package:flutter_localizations`), then you won't be affected by its package pinning.
+</Note>
+
+## Why Does Flutter Pin Package Versions?
+
+By pinning its dependencies, Flutter ensures that future releases of new package versions will not break apps made with an old Flutter SDK.
+
+## How Does Pinning Affect You?
+
+If you're developing a Flutter app, your app can only use the specific version of a package that Flutter has pinned.
+
+### Direct Dependencies
+
+If you have a direct dependency on a pinned package, your pubspec constraint must support the version pinned by Flutter.
+
+**Example:** If Flutter has pinned `package:path` to `1.8.3`, your pubspec constraint must support that version:
+
+```yaml
+dependencies:
+  path: ^1.8.0
+```
+
+### Transitive Dependencies
+
+Similarly, if you're using a package which itself has a dependency on a pinned package, that package needs to support the pinned version (i.e., your transitive dependencies also need to support the pinned version).
+
+<Warning>
+Generally, people experience issues with pinning if their pubspec constraints don't support the pinned Flutter version, or - transitively - if one of their package dependencies doesn't support the pinned version.
+</Warning>
+
+## Workarounds
+
+### An Immediate Dependency Doesn't Resolve
+
+Widen your constraint on the package in question.
+
+**Example:** Change a `>=1.7.0 < 1.8.0` constraint on `package:path` to `^1.8.0`:
+
+```yaml
+dependencies:
+  path: ^1.8.0  # widened from >=1.7.0 < 1.8.0
+```
+
+### Issues Through One of Your Dependencies
+
+The package you're using needs to widen its constraint on the pinned package. You have two options:
+
+1. **Update your dependency** to bring in a new version of the package that supports the pinned version
+2. **Request an update** by visiting the issue tracker of the dependency to let them know about the issue
+
+### Short-Term Solution: Dependency Overrides
+
+If a dependency can't immediately release a new version, you can specify a [dependency override](https://dart.dev/tools/pub/dependencies#dependency-overrides) in your own pubspec:
+
+```yaml
+dependency_overrides:
+  foo: 1.8.3
+```
+
+<Warning>
+This tells pub to use a specific version of a package whether or not it's compatible with the other packages you're using. You're now consuming a version of `foo` that not all of your other dependencies have been tested with. You may see analysis or runtime issues as a result. Consider this a short-term solution.
+</Warning>

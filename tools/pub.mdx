@@ -1,0 +1,653 @@
+---
+title: 'Pub Package Manager'
+description: 'Package manager for Dart and Flutter'
+icon: 'box'
+---
+
+Pub is the package manager for Dart, helping you manage dependencies, publish packages, and organize your Dart projects.
+
+## Overview
+
+Pub provides commands for:
+- Installing and managing dependencies
+- Publishing packages to [pub.dev](https://pub.dev)
+- Running executables from packages
+- Managing global packages
+
+## Usage
+
+```bash
+dart pub <subcommand> [arguments]
+```
+
+## Core Commands
+
+### get
+
+Install or update dependencies:
+
+```bash
+dart pub get
+```
+
+This command:
+1. Reads `pubspec.yaml`
+2. Resolves dependencies
+3. Downloads packages to `.pub-cache`
+4. Creates/updates `pubspec.lock`
+5. Generates `.dart_tool/package_config.json`
+
+<CodeGroup>
+```bash Install Dependencies
+# Install all dependencies
+dart pub get
+
+# Offline mode (use cached packages only)
+dart pub get --offline
+```
+
+```bash Example Output
+$ dart pub get
+Resolving dependencies...
++ http 1.1.0
++ path 1.8.3
+Changed 2 dependencies!
+```
+</CodeGroup>
+
+### add
+
+Add a new dependency to your project:
+
+<CodeGroup>
+```bash Runtime Dependency
+# Add to dependencies
+dart pub add http
+
+# Add with version constraint
+dart pub add http:^1.0.0
+
+# Add multiple packages
+dart pub add http path collection
+```
+
+```bash Dev Dependency
+# Add to dev_dependencies
+dart pub add --dev test
+dart pub add --dev build_runner
+```
+</CodeGroup>
+
+### remove
+
+Remove a dependency:
+
+```bash
+# Remove from dependencies
+dart pub remove http
+
+# Remove dev dependency
+dart pub remove --dev test
+```
+
+### upgrade
+
+Upgrade dependencies to the latest compatible versions:
+
+<CodeGroup>
+```bash Upgrade All
+# Upgrade all dependencies
+dart pub upgrade
+
+# Upgrade and update pubspec.yaml constraints
+dart pub upgrade --major-versions
+```
+
+```bash Upgrade Specific
+# Upgrade specific package
+dart pub upgrade http
+
+# Upgrade multiple packages
+dart pub upgrade http path
+```
+
+```bash Dry Run
+# See what would be upgraded
+dart pub upgrade --dry-run
+```
+</CodeGroup>
+
+### outdated
+
+Check for outdated dependencies:
+
+```bash
+dart pub outdated
+```
+
+Example output:
+```
+Dependencies
+  http 0.13.5 → 1.1.0 (1.2.0 available)
+  path 1.8.0 → 1.8.3
+
+Dev dependencies
+  test 1.24.0 → 1.24.3
+
+Transitive dependencies  
+  async 2.9.0 → 2.11.0
+```
+
+### downgrade
+
+Downgrade to the lowest allowed versions:
+
+```bash
+dart pub downgrade
+```
+
+Useful for testing minimum version compatibility.
+
+## Publishing
+
+### publish
+
+Publish a package to pub.dev:
+
+<CodeGroup>
+```bash Dry Run
+# Check what would be published
+dart pub publish --dry-run
+```
+
+```bash Publish
+# Publish to pub.dev
+dart pub publish
+```
+
+```bash Skip Validation
+# Skip validation (not recommended)
+dart pub publish --force
+```
+</CodeGroup>
+
+### Publishing Checklist
+
+Before publishing:
+
+1. Update version in `pubspec.yaml`
+2. Update `CHANGELOG.md`
+3. Run tests: `dart test`
+4. Check formatting: `dart format --output=none --set-exit-if-changed .`
+5. Analyze code: `dart analyze`
+6. Dry run: `dart pub publish --dry-run`
+7. Publish: `dart pub publish`
+
+## Global Packages
+
+### global activate
+
+Install a package globally:
+
+<CodeGroup>
+```bash From pub.dev
+# Activate from pub.dev
+dart pub global activate webdev
+
+# Activate specific version
+dart pub global activate webdev 3.0.0
+```
+
+```bash From Path
+# Activate from local path
+dart pub global activate --source path /path/to/package
+```
+
+```bash From Git
+# Activate from git repository
+dart pub global activate --source git https://github.com/user/package.git
+
+# Activate from git with path
+dart pub global activate --source git https://github.com/user/mono.git --git-path packages/subpackage
+```
+</CodeGroup>
+
+### global run
+
+Run a globally activated package:
+
+```bash
+dart pub global run webdev serve
+
+# Or use the executable directly (if in PATH)
+webdev serve
+```
+
+### global deactivate
+
+Deactivate a global package:
+
+```bash
+dart pub global deactivate webdev
+```
+
+### global list
+
+List globally activated packages:
+
+```bash
+dart pub global list
+```
+
+Example output:
+```
+webdev 3.0.0
+stagehand 4.0.0
+```
+
+## Other Commands
+
+### deps
+
+Show dependency graph:
+
+<CodeGroup>
+```bash Tree View
+# Show dependency tree
+dart pub deps
+```
+
+```bash Compact
+# Compact output
+dart pub deps --compact
+```
+
+```bash Dev Dependencies
+# Include dev dependencies
+dart pub deps --dev
+```
+</CodeGroup>
+
+Example output:
+```
+my_app 1.0.0
+├── http 1.1.0
+│   ├── async 2.11.0
+│   ├── http_parser 4.0.2
+│   └── meta 1.9.1
+└── path 1.8.3
+```
+
+### cache
+
+Manage the package cache:
+
+<CodeGroup>
+```bash Add to Cache
+# Download package to cache
+dart pub cache add http
+
+# Add specific version
+dart pub cache add http 1.1.0
+```
+
+```bash Clean Cache
+# Remove all cached packages
+dart pub cache clean
+```
+
+```bash Repair Cache
+# Repair corrupted cache
+dart pub cache repair
+```
+</CodeGroup>
+
+### login/logout
+
+Manage pub.dev authentication:
+
+```bash
+# Log in to pub.dev
+dart pub login
+
+# Log out
+dart pub logout
+```
+
+### token
+
+Manage authentication tokens:
+
+<CodeGroup>
+```bash Add Token
+# Add authentication token
+dart pub token add
+```
+
+```bash Remove Token
+# Remove token for default hosted URL
+dart pub token remove
+
+# Remove token for specific server
+dart pub token remove --hosted-url https://pub.dev
+```
+
+```bash List Tokens
+# List all tokens
+dart pub token list
+```
+</CodeGroup>
+
+## Configuration
+
+### pubspec.yaml
+
+The package configuration file:
+
+```yaml pubspec.yaml
+name: my_app
+description: A sample Dart application
+version: 1.0.0
+
+environment:
+  sdk: ^3.0.0
+
+dependencies:
+  http: ^1.1.0
+  path: ^1.8.0
+  
+dev_dependencies:
+  test: ^1.24.0
+  build_runner: ^2.4.0
+```
+
+### Dependency Types
+
+#### Regular Dependencies
+
+```yaml
+dependencies:
+  # pub.dev packages
+  http: ^1.1.0
+  
+  # Git dependencies
+  my_package:
+    git:
+      url: https://github.com/user/my_package.git
+      ref: main
+  
+  # Path dependencies  
+  local_package:
+    path: ../local_package
+  
+  # Hosted dependencies (alternative repository)
+  custom_package:
+    hosted:
+      name: custom_package
+      url: https://my-repo.com
+    version: ^1.0.0
+```
+
+#### Dev Dependencies
+
+Used only during development:
+
+```yaml
+dev_dependencies:
+  test: ^1.24.0
+  build_runner: ^2.4.0
+  mockito: ^5.4.0
+```
+
+#### Dependency Overrides
+
+Force specific versions:
+
+```yaml
+dependency_overrides:
+  http: 1.0.0
+  path: 1.8.2
+```
+
+### Version Constraints
+
+<CodeGroup>
+```yaml Caret Syntax
+# ^1.2.3 means >=1.2.3 <2.0.0
+dependencies:
+  http: ^1.1.0
+```
+
+```yaml Range Syntax
+# Explicit version range
+dependencies:
+  http: '>=1.0.0 <2.0.0'
+```
+
+```yaml Exact Version
+# Pin to exact version
+dependencies:
+  http: 1.1.0
+```
+
+```yaml Any Version
+# Any version (not recommended)
+dependencies:
+  http: any
+```
+</CodeGroup>
+
+### pubspec.lock
+
+Lock file with exact versions:
+
+```yaml pubspec.lock
+packages:
+  http:
+    dependency: "direct main"
+    description:
+      name: http
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.0"
+```
+
+**Important**: Commit `pubspec.lock` for applications, but not for libraries.
+
+## Environment Variables
+
+### PUB_CACHE
+
+Set the package cache location:
+
+```bash
+export PUB_CACHE="$HOME/.pub-cache"
+```
+
+### PUB_HOSTED_URL
+
+Use an alternative package repository:
+
+```bash
+export PUB_HOSTED_URL="https://my-pub-server.com"
+```
+
+## Best Practices
+
+### 1. Commit pubspec.lock
+
+```bash
+# For applications
+git add pubspec.lock
+git commit -m "Lock dependencies"
+
+# For libraries - add to .gitignore
+echo "pubspec.lock" >> .gitignore
+```
+
+### 2. Use Version Constraints
+
+```yaml
+# Good: Allows compatible updates
+dependencies:
+  http: ^1.1.0
+
+# Bad: Too restrictive
+dependencies:
+  http: 1.1.0
+
+# Bad: Too permissive
+dependencies:
+  http: any
+```
+
+### 3. Regular Updates
+
+```bash
+# Check for outdated packages weekly
+dart pub outdated
+
+# Update regularly
+dart pub upgrade
+```
+
+### 4. Clean Development
+
+```bash
+# Remove and reinstall dependencies
+rm -rf .dart_tool/ .packages
+dart pub get
+```
+
+## CI/CD Integration
+
+### GitHub Actions
+
+```yaml .github/workflows/dart.yml
+name: Dart CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dart-lang/setup-dart@v1
+      
+      - name: Install dependencies
+        run: dart pub get
+      
+      - name: Verify dependencies
+        run: dart pub outdated --exit-code
+      
+      - name: Run tests
+        run: dart test
+```
+
+### Cache Dependencies
+
+```yaml .github/workflows/dart.yml
+- name: Cache dependencies
+  uses: actions/cache@v3
+  with:
+    path: ~/.pub-cache
+    key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+    restore-keys: |
+      ${{ runner.os }}-pub-
+```
+
+## Troubleshooting
+
+### Clear Cache
+
+```bash
+# Remove all cached packages
+dart pub cache clean
+
+# Reinstall dependencies
+dart pub get
+```
+
+### Repair Cache
+
+```bash
+# Repair corrupted cache
+dart pub cache repair
+```
+
+### Resolve Conflicts
+
+```bash
+# See dependency resolution
+dart pub deps
+
+# Try upgrading
+dart pub upgrade
+
+# Use dependency overrides as last resort
+```
+
+### Version Solve Failed
+
+```bash
+# Check constraints
+dart pub outdated
+
+# Try with --major-versions
+dart pub upgrade --major-versions
+
+# Use dependency_overrides if needed
+```
+
+## Examples
+
+### New Project Setup
+
+```bash
+# Create project
+dart create my_app
+cd my_app
+
+# Add dependencies
+dart pub add http args
+dart pub add --dev test
+
+# Install
+dart pub get
+```
+
+### Publishing a Package
+
+```bash
+# Prepare package
+dart format .
+dart analyze
+dart test
+
+# Dry run
+dart pub publish --dry-run
+
+# Publish
+dart pub publish
+```
+
+### Using Global Tools
+
+```bash
+# Install webdev
+dart pub global activate webdev
+
+# Add to PATH (add to ~/.bashrc or ~/.zshrc)
+export PATH="$PATH:$HOME/.pub-cache/bin"
+
+# Use webdev
+webdev serve
+```
+
+## See Also
+
+- [pub.dev](https://pub.dev) - Official package repository
+- [Package Layout Conventions](https://dart.dev/tools/pub/package-layout) - How to structure packages
+- [Publishing Packages](https://dart.dev/tools/pub/publishing) - Publishing guide
+- [Dependency Management](https://dart.dev/guides/packages) - Package management guide

@@ -1,0 +1,284 @@
+---
+title: Installation
+description: Install the Dart SDK on macOS, Windows, or Linux using package managers or direct downloads
+---
+
+# Install the Dart SDK
+
+Install the Dart SDK to start developing Dart applications. Choose your operating system below for installation instructions.
+
+<Note>
+For Flutter developers: If you have Flutter installed, you already have the Dart SDK. The Flutter SDK includes a compatible version of Dart.
+</Note>
+
+## Choose your platform
+
+<Tabs>
+  <Tab title="macOS">
+    ### Install with Homebrew
+
+    The easiest way to install Dart on macOS is using [Homebrew](https://brew.sh/).
+
+    <Steps>
+      <Step title="Tap the Dart repository">
+        ```bash
+        brew tap dart-lang/dart
+        ```
+      </Step>
+      
+      <Step title="Install Dart">
+        For the stable release:
+        ```bash
+        brew install dart
+        ```
+        
+        For the beta release:
+        ```bash
+        brew install dart-beta
+        ```
+        
+        For the dev release:
+        ```bash
+        brew install --head dart
+        ```
+      </Step>
+      
+      <Step title="Verify installation">
+        ```bash
+        dart --version
+        ```
+      </Step>
+    </Steps>
+
+    ### Upgrade Dart
+
+    ```bash
+    # Stable or beta channel
+    brew upgrade dart
+    
+    # Dev channel
+    brew reinstall dart
+    ```
+
+    ### Switch channels
+
+    To switch between channels, first unlink the current release:
+
+    ```bash
+    brew unlink dart
+    ```
+
+    Then install the desired channel using the commands above.
+  </Tab>
+  
+  <Tab title="Windows">
+    ### Install with Chocolatey
+
+    Install Dart on Windows using [Chocolatey](https://chocolatey.org/), a package manager for Windows.
+
+    <Steps>
+      <Step title="Install Chocolatey">
+        If you don't have Chocolatey, install it from [chocolatey.org/install](https://chocolatey.org/install).
+      </Step>
+      
+      <Step title="Install Dart SDK">
+        For the stable release:
+        ```powershell
+        choco install dart-sdk
+        ```
+        
+        For the dev release:
+        ```powershell
+        choco install dart-sdk --pre
+        ```
+      </Step>
+      
+      <Step title="Verify installation">
+        ```powershell
+        dart --version
+        ```
+      </Step>
+    </Steps>
+
+    ### Upgrade Dart
+
+    ```powershell
+    # Stable channel
+    choco upgrade dart-sdk
+    
+    # Dev channel (use --pre flag)
+    choco upgrade dart-sdk --pre
+    ```
+
+    <Warning>
+    Make sure to run your terminal as Administrator when installing or upgrading the Dart SDK.
+    </Warning>
+  </Tab>
+  
+  <Tab title="Linux">
+    ### Install with apt-get
+
+    Install Dart on Debian/Ubuntu Linux distributions using `apt-get`.
+
+    <Steps>
+      <Step title="Configure package repository">
+        Run this one-time setup to configure the Dart package repositories:
+        
+        ```bash
+        sudo apt-get update
+        sudo apt-get install apt-transport-https
+        wget -qO- https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/dart.gpg
+        echo 'deb [signed-by=/usr/share/keyrings/dart.gpg arch=amd64] https://storage.googleapis.com/download.dartlang.org/linux/debian stable main' | sudo tee /etc/apt/sources.list.d/dart_stable.list
+        ```
+      </Step>
+      
+      <Step title="Install Dart SDK">
+        ```bash
+        sudo apt-get update
+        sudo apt-get install dart
+        ```
+      </Step>
+      
+      <Step title="Add Dart to PATH">
+        Add the Dart SDK to your PATH by adding this line to your `~/.bashrc` or `~/.zshrc`:
+        
+        ```bash
+        export PATH="$PATH:/usr/lib/dart/bin"
+        ```
+        
+        Then reload your shell configuration:
+        ```bash
+        source ~/.bashrc  # or source ~/.zshrc
+        ```
+      </Step>
+      
+      <Step title="Verify installation">
+        ```bash
+        dart --version
+        ```
+      </Step>
+    </Steps>
+
+    ### Install specific channels
+
+    You can install different release channels:
+
+    ```bash
+    # Stable (latest stable release)
+    sudo apt-get install dart
+    
+    # Beta channel
+    sudo apt-get -t testing install dart
+    
+    # Dev channel
+    sudo apt-get -t unstable install dart
+    ```
+
+    ### Upgrade Dart
+
+    ```bash
+    sudo apt-get update
+    sudo apt-get upgrade dart
+    ```
+  </Tab>
+</Tabs>
+
+## Alternative installation methods
+
+<AccordionGroup>
+  <Accordion title="Download SDK archives">
+    Download platform-specific SDK archives from the [Dart SDK archive](https://dart.dev/tools/sdk/archive).
+    
+    Available for all channels:
+    - **Stable**: Production-ready releases
+    - **Beta**: Preview of upcoming stable releases
+    - **Dev**: Latest development builds
+    
+    After downloading, extract the archive and add the `bin` directory to your PATH.
+  </Accordion>
+  
+  <Accordion title="Build from source">
+    For advanced users, you can build the Dart SDK from source.
+    
+    <Steps>
+      <Step title="Install dependencies">
+        **Linux:**
+        ```bash
+        sudo apt-get install git python3 curl xz-utils
+        ```
+        
+        **macOS:**
+        - Install Xcode from the App Store
+        
+        **Windows:**
+        - Install Visual Studio 2017 or newer with "Desktop development with C++"
+        - Install Windows 10 SDK
+      </Step>
+      
+      <Step title="Install depot_tools">
+        ```bash
+        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+        export PATH="$PATH:$PWD/depot_tools"
+        ```
+      </Step>
+      
+      <Step title="Get the source">
+        ```bash
+        mkdir dart-sdk
+        cd dart-sdk
+        fetch dart
+        ```
+      </Step>
+      
+      <Step title="Build the SDK">
+        ```bash
+        cd sdk
+        ./tools/build.py --mode release create_sdk
+        ```
+      </Step>
+    </Steps>
+    
+    <Note>
+    Building from source is typically only needed for SDK contributors or for testing unreleased features.
+    </Note>
+  </Accordion>
+</AccordionGroup>
+
+## Verify your installation
+
+After installation, verify that Dart is correctly installed:
+
+```bash
+dart --version
+```
+
+You should see output similar to:
+
+```
+Dart SDK version: 3.x.x (stable)
+```
+
+## System requirements
+
+<CardGroup cols={3}>
+  <Card title="macOS" icon="apple">
+    - macOS 10.14 (Mojave) or later
+    - x64 or ARM64 processor
+  </Card>
+  
+  <Card title="Windows" icon="windows">
+    - Windows 10 or later
+    - x64 processor
+  </Card>
+  
+  <Card title="Linux" icon="linux">
+    - Debian 10 or Ubuntu 18.04 or later
+    - x64, ARM, ARM64, or RISC-V processor
+  </Card>
+</CardGroup>
+
+## Next steps
+
+<Card title="Quickstart" icon="rocket" href="/quickstart">
+  Now that you have Dart installed, write your first Dart program
+</Card>

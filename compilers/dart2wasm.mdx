@@ -1,0 +1,352 @@
+---
+title: dart2wasm - Dart-to-WebAssembly Compiler
+description: Compile Dart to WebAssembly for high-performance web applications
+---
+
+The `dart2wasm` compiler translates Dart code into WebAssembly (Wasm) modules for modern web browsers. It offers near-native performance and compact binary size, making it ideal for compute-intensive web applications.
+
+## Overview
+
+`dart2wasm` compiles Dart to WebAssembly, a portable, low-level binary format designed for efficient execution in web browsers. WebAssembly provides:
+
+- **Near-native performance** - Faster than JavaScript for CPU-intensive tasks
+- **Compact binaries** - Smaller than equivalent JavaScript
+- **Predictable performance** - No JIT compilation overhead
+- **Memory safety** - Sandboxed execution environment
+
+### Browser Support
+
+WebAssembly is supported in all modern browsers:
+- Chrome/Edge 91+
+- Firefox 89+
+- Safari 15+
+
+## Basic Usage
+
+### Command Line
+
+Compile a Dart application to WebAssembly:
+
+```bash
+dart compile wasm -o output.wasm input.dart
+```
+
+This generates:
+- `output.wasm` - WebAssembly binary
+- `output.mjs` - JavaScript loader module
+
+### Common Options
+
+| Option | Description |
+|--------|-------------|
+| `-o, --output=<file>` | Output file path (*.wasm) |
+| `-O0, -O1, -O2, -O3, -O4` | Optimization level |
+| `--no-minify` | Don't minify imports/exports |
+| `--enable-asserts` | Enable assert statements |
+| `-D<name>=<value>` | Define environment constant |
+
+## Building and Testing
+
+### Local Development
+
+For rapid iteration during development:
+
+```bash
+# Compile without optimizations (fast compilation)
+pkg/dart2wasm/tool/compile_benchmark -O0 -g app.dart app.wasm
+
+# Run with D8 (V8 shell)
+pkg/dart2wasm/tool/run_benchmark --d8 app.wasm
+
+# Run with Node.js
+node --experimental-wasm-gc output.mjs
+```
+
+The `-g` flag preserves the name section for debugging and profiling.
+
+### Using the SDK
+
+With a built Dart SDK:
+
+```bash
+# Build the SDK
+tools/build.py -mrelease -ax64 create_sdk
+
+# Compile with dart compile wasm
+dart compile wasm -o app.wasm app.dart
+```
+
+## Optimization Levels
+
+<Tabs>
+  <Tab title="O0 - Debug Build">
+    No optimizations, fast compilation:
+    
+    ```bash
+    dart compile wasm -O0 -o debug.wasm app.dart
+    ```
+    
+    - Fastest compilation
+    - Largest binary size
+    - Best for debugging
+    - No wasm-opt passes
+  </Tab>
+  
+  <Tab title="O1 - Size Optimized">
+    Optimize for binary size:
+    
+    ```bash
+    dart compile wasm -O1 -o small.wasm app.dart
+    ```
+    
+    - Smaller than O2
+    - Some performance trade-offs
+    - Good for bandwidth-constrained deployments
+  </Tab>
+  
+  <Tab title="O2 - Balanced">
+    Balanced optimization (default):
+    
+    ```bash
+    dart compile wasm -O2 -o app.wasm app.dart
+    ```
+    
+    - Good balance of speed and size
+    - Recommended for production
+    - Includes wasm-opt optimizations
+  </Tab>
+  
+  <Tab title="O3 - Speed Optimized">
+    Aggressive optimization for performance:
+    
+    ```bash
+    dart compile wasm -O3 -o fast.wasm app.dart
+    ```
+    
+    - Maximum runtime performance
+    - May increase binary size
+    - Longer compilation time
+  </Tab>
+  
+  <Tab title="O4 - Maximum">
+    Maximum optimization with unsafe assumptions:
+    
+    ```bash
+    dart compile wasm -O4 -o fastest.wasm app.dart
+    ```
+    
+    - Fastest execution
+    - Trusts downcasts and late variables
+    - Use only with thorough testing
+  </Tab>
+</Tabs>
+
+## Loading WebAssembly
+
+### Using the Generated Loader
+
+The compiler generates a JavaScript module loader:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <script type="module">
+    import { instantiate } from './output.mjs';
+    
+    // Instantiate and run
+    const instance = await instantiate();
+    // Your Dart main() function runs automatically
+  </script>
+</head>
+<body>
+  <div id="output"></div>
+</body>
+</html>
+```
+
+### Custom Imports and Exports
+
+Define JavaScript interop:
+
+```dart
+// Dart code
+import 'dart:js_interop';
+
+@JS()
+external void consoleLog(String message);
+
+void main() {
+  consoleLog('Hello from Wasm!');
+}
+```
+
+See [imports_and_exports.md](https://github.com/dart-lang/sdk/blob/main/pkg/dart2wasm/docs/imports_and_exports.md) for detailed interop documentation.
+
+## Wasm Detection
+
+Detect if code is running as WebAssembly:
+
+```dart
+const bool isWasm = bool.fromEnvironment('dart.tool.dart2wasm');
+
+void platformSpecificCode() {
+  if (isWasm) {
+    // WebAssembly-specific code
+  } else {
+    // JavaScript fallback
+  }
+}
+```
+
+This constant is tree-shaken, so unused branches are eliminated.
+
+## Inspecting Wasm Output
+
+### Disassemble to WAT
+
+Convert binary Wasm to text format:
+
+```bash
+# Using wasm2wat from WABT
+wasm2wat output.wasm -o output.wat
+
+# Or use the Dart wrapper
+dart pkg/dart2wasm/bin/wasm2wat.dart output.wasm > output.wat
+```
+
+### Analyze Binary Size
+
+```bash
+# Use wasm-objdump to inspect sections
+wasm-objdump -h output.wasm
+
+# Detailed disassembly
+wasm-objdump -d output.wasm > disassembly.txt
+```
+
+See [inspecting_wasm.md](https://github.com/dart-lang/sdk/blob/main/pkg/dart2wasm/docs/inspecting_wasm.md) for more tools.
+
+## Testing
+
+Run dart2wasm test suite:
+
+```bash
+# With approval database
+dart tools/test.dart -n dart2wasm-linux-d8
+
+# With specific JavaScript engine
+dart tools/test.dart -n dart2wasm-linux-optimized-jsshell
+
+# Available engines: d8, jsc, jsshell
+```
+
+## Benchmarking
+
+### Performance Testing
+
+```bash
+# Compile optimized build
+pkg/dart2wasm/tool/compile_benchmark -O3 benchmark.dart bench.wasm
+
+# Run with timing
+pkg/dart2wasm/tool/run_benchmark --d8 bench.wasm
+```
+
+### Comparing with JavaScript
+
+<Tabs>
+  <Tab title="WebAssembly">
+    ```bash
+    # Compile to Wasm
+    dart compile wasm -O3 -o app.wasm app.dart
+    
+    # Measure startup and execution
+    time node --experimental-wasm-gc app.mjs
+    ```
+  </Tab>
+  
+  <Tab title="JavaScript">
+    ```bash
+    # Compile to JS
+    dart compile js -O3 -o app.js app.dart
+    
+    # Measure startup and execution  
+    time node app.js
+    ```
+  </Tab>
+</Tabs>
+
+See [benchmarking.md](https://github.com/dart-lang/sdk/blob/main/pkg/dart2wasm/docs/benchmarking.md) for detailed benchmarking guides.
+
+## Advanced Configuration
+
+### Compiler Options
+
+Pass extra options to the compiler:
+
+```bash
+pkg/dart2wasm/tool/compile_benchmark \
+  --extra-compiler-option=--verbose \
+  --extra-compiler-option=--emit-type-checks \
+  app.dart app.wasm
+```
+
+View all options:
+
+```bash
+dart pkg/dart2wasm/bin/dart2wasm.dart --help
+```
+
+### Running from Source
+
+Develop the compiler itself:
+
+```bash
+# Run without rebuilding
+pkg/dart2wasm/tool/compile_benchmark --src app.dart app.wasm
+
+# With assertions for compiler debugging
+pkg/dart2wasm/tool/compile_benchmark --src --compiler-asserts app.dart app.wasm
+```
+
+## Platform-Specific Builds
+
+### V8 (Chrome/Node.js)
+
+Optimize for V8:
+
+```bash
+dart compile wasm -O3 -o app.wasm app.dart
+node --experimental-wasm-gc app.mjs
+```
+
+See [v8.md](https://github.com/dart-lang/sdk/blob/main/pkg/dart2wasm/docs/v8.md) for V8-specific details.
+
+### Flutter Web (HHH)
+
+For Flutter web integration:
+
+See [flutter_hhh_builds.md](https://github.com/dart-lang/sdk/blob/main/pkg/dart2wasm/docs/flutter_hhh_builds.md) for Flutter-specific build instructions.
+
+## Limitations
+
+- **No dart:io** - File system operations not available in browser
+- **No dart:mirrors** - Reflection not supported
+- **No dart:ffi** - FFI only works in native environments
+- **GC proposal required** - Needs browsers with WebAssembly GC support
+- **Experimental** - API and features may change
+
+## Performance Characteristics
+
+- **Startup time:** Faster than dart2js in most cases
+- **Execution speed:** Near-native for compute-intensive tasks
+- **Binary size:** Smaller than equivalent JavaScript
+- **Memory usage:** Efficient with WebAssembly linear memory
+
+## Related Resources
+
+- [dart2wasm source code](https://github.com/dart-lang/sdk/tree/main/pkg/dart2wasm)
+- [WebAssembly specification](https://webassembly.github.io/spec/)
+- [Wasm GC proposal](https://github.com/WebAssembly/gc)
+- [Build and test guide](https://github.com/dart-lang/sdk/blob/main/pkg/dart2wasm/docs/build_and_test.md)

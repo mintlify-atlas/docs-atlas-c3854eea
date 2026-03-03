@@ -1,0 +1,517 @@
+---
+title: Dart VM C API Overview
+description: Complete reference for the Dart VM C API for embedding and native extensions
+---
+
+The Dart VM C API allows you to embed the Dart Virtual Machine in C/C++ applications and create native extensions. This API is defined in the header files located in `runtime/include/`.
+
+## Key Concepts
+
+### Handles
+
+Handles are the primary way to interact with Dart objects from C code. Because the garbage collector may move objects, you cannot refer to objects directly. Instead, use handles which are automatically updated by the GC.
+
+```c
+typedef struct _Dart_Handle* Dart_Handle;
+typedef Dart_Handle Dart_PersistentHandle;
+typedef struct _Dart_WeakPersistentHandle* Dart_WeakPersistentHandle;
+typedef struct _Dart_FinalizableHandle* Dart_FinalizableHandle;
+```
+
+#### Handle Types
+
+- **Local handles** - Allocated within the current scope, deallocated when scope exits
+- **Persistent handles** - Live for the lifetime of the isolate unless explicitly deallocated
+- **Weak persistent handles** - Automatically set to Dart_Null when object is garbage collected
+- **Finalizable handles** - Automatically deleted when object is garbage collected
+
+<Warning>
+Handles should be passed by value and never allocated on the heap. Most functions return local handles unless otherwise specified.
+</Warning>
+
+### Isolates
+
+Isolates are Dart's unit of concurrency. Each isolate has its own memory and thread of control with no shared state.
+
+```c
+typedef struct _Dart_Isolate* Dart_Isolate;
+typedef struct _Dart_IsolateGroup* Dart_IsolateGroup;
+```
+
+Most Dart API functions require a current isolate to be set via `Dart_CreateIsolateGroup()` or `Dart_EnterIsolate()`.
+
+### Error Handling
+
+Functions return error handles when problems occur. Check for errors using `Dart_IsError()`.
+
+**Error types:**
+- **Api errors** - API misuse (invalid arguments or context)
+- **Unhandled exception errors** - Dart exception thrown but not caught
+- **Compilation errors** - Compile-time errors during execution
+- **Fatal errors** - System wants to shut down the isolate
+
+## Initialization Functions
+
+### Dart_Initialize
+
+```c
+Dart_EXPORT DART_API_WARN_UNUSED_RESULT char* Dart_Initialize(
+    Dart_InitializeParams* params);
+```
+
+Initializes the Dart VM. Must be called before any other Dart API functions.
+
+<ParamField path="params" type="Dart_InitializeParams*">
+  Initialization parameters including VM snapshot data, callbacks for isolate lifecycle, and file I/O operations.
+</ParamField>
+
+**Returns:** NULL on success, error message otherwise (caller must free)
+
+<CodeGroup>
+```c Example
+Dart_InitializeParams params = {};
+params.version = DART_INITIALIZE_PARAMS_CURRENT_VERSION;
+params.vm_snapshot_data = vm_snapshot_data;
+params.vm_snapshot_instructions = vm_snapshot_instructions;
+params.create_group = CreateIsolateGroupCallback;
+params.shutdown_isolate = ShutdownIsolateCallback;
+
+char* error = Dart_Initialize(&params);
+if (error != NULL) {
+  fprintf(stderr, "Failed to initialize VM: %s\n", error);
+  free(error);
+  return 1;
+}
+```
+</CodeGroup>
+
+### Dart_Cleanup
+
+```c
+Dart_EXPORT DART_API_WARN_UNUSED_RESULT char* Dart_Cleanup(void);
+```
+
+Cleanup state in the VM before process termination.
+
+**Returns:** NULL on success, error message otherwise
+
+<Warning>
+This function must not be called on a thread created by the VM itself.
+</Warning>
+
+### Dart_SetVMFlags
+
+```c
+Dart_EXPORT DART_API_WARN_UNUSED_RESULT char* Dart_SetVMFlags(
+    int argc,
+    const char** argv);
+```
+
+Sets command line flags. Should be called before `Dart_Initialize()`.
+
+<ParamField path="argc" type="int">
+  Number of arguments in the argv array
+</ParamField>
+
+<ParamField path="argv" type="const char**">
+  Array of flag strings (e.g., "--enable-asserts")
+</ParamField>
+
+## Isolate Management
+
+### Dart_CreateIsolateGroup
+
+```c
+Dart_EXPORT Dart_Isolate Dart_CreateIsolateGroup(
+    const char* script_uri,
+    const char* name,
+    const uint8_t* isolate_snapshot_data,
+    const uint8_t* isolate_snapshot_instructions,
+    Dart_IsolateFlags* flags,
+    void* isolate_group_data,
+    void* isolate_data,
+    char** error);
+```
+
+Creates a new isolate group and isolate. The new isolate becomes the current isolate.
+
+<ParamField path="script_uri" type="const char*">
+  URI of the main source file or snapshot this isolate will load
+</ParamField>
+
+<ParamField path="name" type="const char*">
+  Short name for debugging (e.g., "foo.dart:main()")
+</ParamField>
+
+<ParamField path="isolate_snapshot_data" type="const uint8_t*">
+  Snapshot data buffer or NULL. Must remain valid until isolate shutdown.
+</ParamField>
+
+<ParamField path="flags" type="Dart_IsolateFlags*">
+  VM-specific flags or NULL for defaults
+</ParamField>
+
+<ParamField path="isolate_group_data" type="void*">
+  Embedder group data accessible via Dart_IsolateGroupData()
+</ParamField>
+
+<ParamField path="isolate_data" type="void*">
+  Embedder isolate data accessible via Dart_IsolateData()
+</ParamField>
+
+**Returns:** New isolate on success, NULL on failure
+
+### Dart_CreateIsolateGroupFromKernel
+
+```c
+Dart_EXPORT Dart_Isolate Dart_CreateIsolateGroupFromKernel(
+    const char* script_uri,
+    const char* name,
+    const uint8_t* kernel_buffer,
+    intptr_t kernel_buffer_size,
+    Dart_IsolateFlags* flags,
+    void* isolate_group_data,
+    void* isolate_data,
+    char** error);
+```
+
+Creates a new isolate from a Dart Kernel file.
+
+<ParamField path="kernel_buffer" type="const uint8_t*">
+  Buffer containing kernel/DIL program. Must remain valid until isolate shutdown.
+</ParamField>
+
+<ParamField path="kernel_buffer_size" type="intptr_t">
+  Size of the kernel buffer in bytes
+</ParamField>
+
+### Dart_EnterIsolate
+
+```c
+Dart_EXPORT void Dart_EnterIsolate(Dart_Isolate isolate);
+```
+
+Enters an isolate. Sets the current isolate to the provided isolate.
+
+<Warning>
+Requires there to be no current isolate. Multiple threads may not be in the same isolate at once.
+</Warning>
+
+### Dart_ShutdownIsolate
+
+```c
+Dart_EXPORT void Dart_ShutdownIsolate(void);
+```
+
+Shuts down the current isolate. After this call, the current isolate is NULL. Any current scopes will be exited and shutdown callbacks invoked.
+
+### Dart_CurrentIsolate
+
+```c
+Dart_EXPORT Dart_Isolate Dart_CurrentIsolate(void);
+```
+
+Returns the current isolate or NULL if there is no current isolate.
+
+## Scope Management
+
+### Dart_EnterScope
+
+```c
+Dart_EXPORT void Dart_EnterScope(void);
+```
+
+Enters a new scope. Local handles are allocated within the current scope and deallocated when the scope exits.
+
+### Dart_ExitScope
+
+```c
+Dart_EXPORT void Dart_ExitScope(void);
+```
+
+Exits the current scope and deallocates all local handles allocated within it.
+
+<CodeGroup>
+```c Example
+void ProcessDartObject(Dart_Handle obj) {
+  Dart_EnterScope();
+  
+  // Local handles allocated here
+  Dart_Handle str = Dart_ToString(obj);
+  const char* c_str;
+  Dart_StringToCString(str, &c_str);
+  printf("Object: %s\n", c_str);
+  
+  Dart_ExitScope();  // All local handles deallocated
+}
+```
+</CodeGroup>
+
+<Warning>
+Always pair Dart_EnterScope() with Dart_ExitScope(). Failure to exit scopes causes memory leaks.
+</Warning>
+
+## Object Creation
+
+### Dart_NewInteger
+
+```c
+Dart_EXPORT Dart_Handle Dart_NewInteger(int64_t value);
+```
+
+Creates a new integer object.
+
+### Dart_NewDouble
+
+```c
+Dart_EXPORT Dart_Handle Dart_NewDouble(double value);
+```
+
+Creates a new double object.
+
+### Dart_NewBoolean
+
+```c
+Dart_EXPORT Dart_Handle Dart_NewBoolean(bool value);
+```
+
+Creates a new boolean object.
+
+### Dart_NewStringFromCString
+
+```c
+Dart_EXPORT Dart_Handle Dart_NewStringFromCString(const char* str);
+```
+
+Creates a new string from a NULL-terminated C string (UTF-8).
+
+### Dart_NewStringFromUTF8
+
+```c
+Dart_EXPORT Dart_Handle Dart_NewStringFromUTF8(
+    const uint8_t* utf8_array,
+    intptr_t length);
+```
+
+Creates a new string from UTF-8 encoded array.
+
+<ParamField path="utf8_array" type="const uint8_t*">
+  UTF-8 encoded character array
+</ParamField>
+
+<ParamField path="length" type="intptr_t">
+  Length of the array in bytes
+</ParamField>
+
+## Error Handling Functions
+
+### Dart_IsError
+
+```c
+Dart_EXPORT bool Dart_IsError(Dart_Handle handle);
+```
+
+Returns true if the handle is an error handle.
+
+### Dart_GetError
+
+```c
+Dart_EXPORT const char* Dart_GetError(Dart_Handle handle);
+```
+
+Gets the error message from an error handle. Returns empty string ("") if handle is valid. The returned string is scope allocated.
+
+### Dart_PropagateError
+
+```c
+Dart_EXPORT void Dart_PropagateError(Dart_Handle handle);
+```
+
+Propagates an error. This function does not return on success - it uses non-local control transfer.
+
+<CodeGroup>
+```c Example
+Dart_Handle result = Dart_Invoke(...);
+if (Dart_IsError(result)) {
+  // Clean up resources first
+  FreeMyResources();
+  
+  // Then propagate - this does not return
+  Dart_PropagateError(result);
+}
+```
+</CodeGroup>
+
+## Invocation Functions
+
+### Dart_Invoke
+
+```c
+Dart_EXPORT DART_API_WARN_UNUSED_RESULT Dart_Handle Dart_Invoke(
+    Dart_Handle target,
+    Dart_Handle name,
+    int number_of_arguments,
+    Dart_Handle* arguments);
+```
+
+Invokes a function or method on a target object, type, or library.
+
+<ParamField path="target" type="Dart_Handle">
+  An object, type, or library
+</ParamField>
+
+<ParamField path="name" type="Dart_Handle">
+  Handle to a string containing the function name
+</ParamField>
+
+<ParamField path="number_of_arguments" type="int">
+  Number of arguments in the arguments array
+</ParamField>
+
+<ParamField path="arguments" type="Dart_Handle*">
+  Array of argument handles
+</ParamField>
+
+**Returns:** Return value on success, error handle on failure
+
+<CodeGroup>
+```c Example
+Dart_Handle lib = Dart_RootLibrary();
+Dart_Handle name = Dart_NewStringFromCString("myFunction");
+Dart_Handle args[2];
+args[0] = Dart_NewInteger(42);
+args[1] = Dart_NewStringFromCString("hello");
+
+Dart_Handle result = Dart_Invoke(lib, name, 2, args);
+if (Dart_IsError(result)) {
+  fprintf(stderr, "Error: %s\n", Dart_GetError(result));
+}
+```
+</CodeGroup>
+
+### Dart_InvokeClosure
+
+```c
+Dart_EXPORT DART_API_WARN_UNUSED_RESULT Dart_Handle Dart_InvokeClosure(
+    Dart_Handle closure,
+    int number_of_arguments,
+    Dart_Handle* arguments);
+```
+
+Invokes a Dart closure with the given arguments.
+
+## Persistent Handles
+
+### Dart_NewPersistentHandle
+
+```c
+Dart_EXPORT Dart_PersistentHandle Dart_NewPersistentHandle(Dart_Handle object);
+```
+
+Allocates a persistent handle that lives for the lifetime of the current isolate.
+
+### Dart_DeletePersistentHandle
+
+```c
+Dart_EXPORT void Dart_DeletePersistentHandle(Dart_PersistentHandle object);
+```
+
+Deallocates a persistent handle.
+
+<Warning>
+Always delete persistent handles when done to avoid memory leaks. These handles are NOT automatically deallocated.
+</Warning>
+
+### Dart_NewWeakPersistentHandle
+
+```c
+Dart_EXPORT Dart_WeakPersistentHandle Dart_NewWeakPersistentHandle(
+    Dart_Handle object,
+    void* peer,
+    intptr_t external_allocation_size,
+    Dart_HandleFinalizer callback);
+```
+
+Allocates a weak persistent handle with a finalizer callback.
+
+<ParamField path="object" type="Dart_Handle">
+  An object with identity
+</ParamField>
+
+<ParamField path="peer" type="void*">
+  Pointer to native object or NULL, passed to callback
+</ParamField>
+
+<ParamField path="external_allocation_size" type="intptr_t">
+  Bytes allocated externally for peer (informs GC)
+</ParamField>
+
+<ParamField path="callback" type="Dart_HandleFinalizer">
+  Function called when object is garbage collected
+</ParamField>
+
+<CodeGroup>
+```c Example
+typedef void (*Dart_HandleFinalizer)(void* isolate_callback_data, void* peer);
+
+void MyFinalizer(void* isolate_data, void* peer) {
+  MyNativeObject* obj = (MyNativeObject*)peer;
+  FreeMyNativeObject(obj);
+}
+
+// Create weak handle
+MyNativeObject* native_obj = AllocateMyNativeObject();
+Dart_WeakPersistentHandle weak = Dart_NewWeakPersistentHandle(
+    dart_obj,
+    native_obj,
+    sizeof(MyNativeObject),
+    MyFinalizer
+);
+```
+</CodeGroup>
+
+## Library Functions
+
+### Dart_RootLibrary
+
+```c
+Dart_EXPORT Dart_Handle Dart_RootLibrary(void);
+```
+
+Returns the root library for the current isolate.
+
+### Dart_LookupLibrary
+
+```c
+Dart_EXPORT Dart_Handle Dart_LookupLibrary(Dart_Handle url);
+```
+
+Looks up a library by URL.
+
+<ParamField path="url" type="Dart_Handle">
+  Handle to a string containing the library URL
+</ParamField>
+
+## Version Information
+
+### Dart_VersionString
+
+```c
+Dart_EXPORT const char* Dart_VersionString(void);
+```
+
+Returns the version string for the Dart VM. Can be called without initializing the VM.
+
+## Best Practices
+
+1. **Always check for errors** after API calls that can fail
+2. **Use scopes properly** to manage local handle lifetime
+3. **Clean up resources** before propagating errors
+4. **Delete persistent handles** when no longer needed
+5. **Keep snapshots valid** for the lifetime of isolates that use them
+6. **Use Dart_SetReturnValue** in native functions instead of Dart_PropagateError when possible
+
+## See Also
+
+- [Native Extensions](/api/native-extensions) - Creating native extensions
+- [Embedding Dart VM](/api/embedding) - Embedding the VM in applications

@@ -1,0 +1,235 @@
+---
+title: Building for Fuchsia
+description: Build the Dart SDK for Fuchsia OS
+---
+
+This guide covers building the Dart SDK and runtime for Fuchsia OS.
+
+## Prerequisites
+
+<Note>
+Before building for Fuchsia, you must have the Dart source tree set up using the standard build instructions. See [Building from Source](/building/from-source) for details.
+</Note>
+
+## Setup
+
+<Steps>
+  <Step title="Update your .gclient file">
+    Configure your build to download Fuchsia dependencies by editing your `.gclient` file (located in the directory that contains the main `dart` directory):
+
+    ```python
+    "custom_vars": {
+      "download_fuchsia_deps": True,
+    },
+    ```
+
+    <Note>
+    Add this to the existing `custom_vars` section if you already have one, or create the section if it doesn't exist.
+    </Note>
+  </Step>
+
+  <Step title="Sync dependencies">
+    Download the Fuchsia-specific dependencies:
+
+    ```bash
+    gclient sync
+    ```
+
+    This downloads the Fuchsia SDK and related build tools.
+  </Step>
+</Steps>
+
+## Building
+
+Build the Dart SDK for Fuchsia using the `--os=fuchsia` flag:
+
+<CodeGroup>
+  ```bash Full SDK
+  ./tools/build.py --mode=release --os=fuchsia --arch=arm64 create_sdk runtime
+  ```
+
+  ```bash Runtime Only
+  ./tools/build.py --mode=release --os=fuchsia --arch=arm64 runtime
+  ```
+
+  ```bash Debug Build
+  ./tools/build.py --mode=debug --os=fuchsia --arch=arm64 create_sdk runtime
+  ```
+</CodeGroup>
+
+### Build Options
+
+- `--mode`: Build mode (`release` or `debug`)
+- `--os=fuchsia`: Target Fuchsia OS
+- `--arch`: Target architecture (typically `arm64` or `x64`)
+- `create_sdk`: Build the complete SDK
+- `runtime`: Build the Dart VM runtime
+
+### Supported Architectures
+
+Fuchsia builds support:
+
+- `arm64` - 64-bit ARM (most common for Fuchsia devices)
+- `x64` - 64-bit x86 (for Fuchsia emulators)
+
+## Testing
+
+Run tests on Fuchsia builds using the test script with the Fuchsia runtime:
+
+```bash
+./tools/test.py -nvm-fuchsia-release-arm64 -j4 ffi
+```
+
+### Test Command Breakdown
+
+- `-nvm-fuchsia-release-arm64`: Named configuration for Fuchsia VM
+  - `vm`: Use the VM runtime
+  - `fuchsia`: Target Fuchsia OS
+  - `release`: Release build mode
+  - `arm64`: ARM64 architecture
+- `-j4`: Run 4 parallel test tasks
+- `ffi`: Run FFI tests (you can specify other test suites)
+
+### Running Different Test Suites
+
+<CodeGroup>
+  ```bash FFI Tests
+  ./tools/test.py -nvm-fuchsia-release-arm64 -j4 ffi
+  ```
+
+  ```bash Core Library Tests
+  ./tools/test.py -nvm-fuchsia-release-arm64 -j4 corelib
+  ```
+
+  ```bash Language Tests
+  ./tools/test.py -nvm-fuchsia-release-arm64 -j4 language
+  ```
+
+  ```bash All Tests
+  ./tools/test.py -nvm-fuchsia-release-arm64 -j4
+  ```
+</CodeGroup>
+
+## Build Output
+
+The Fuchsia build artifacts are placed in:
+
+```bash
+out/FuchsiaReleaseARM64/  # For ARM64 release builds
+out/FuchsiaDebugARM64/    # For ARM64 debug builds
+out/FuchsiaReleaseX64/    # For x64 release builds
+```
+
+## Common Build Configurations
+
+### Development Build
+
+For faster iteration during development:
+
+```bash
+./tools/build.py --mode=debug --os=fuchsia --arch=arm64 runtime
+```
+
+### Release Build with Tests
+
+For testing a production-like build:
+
+```bash
+./tools/build.py --mode=release --os=fuchsia --arch=arm64 create_sdk runtime
+./tools/test.py -nvm-fuchsia-release-arm64 -j4
+```
+
+### Multi-Architecture Build
+
+Build for both ARM64 and x64:
+
+```bash
+./tools/build.py --mode=release --os=fuchsia --arch=arm64 create_sdk runtime
+./tools/build.py --mode=release --os=fuchsia --arch=x64 create_sdk runtime
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Build fails with missing Fuchsia SDK">
+    Ensure you've configured Fuchsia dependencies:
+
+    1. Check your `.gclient` file contains:
+       ```python
+       "custom_vars": {
+         "download_fuchsia_deps": True,
+       },
+       ```
+
+    2. Re-run `gclient sync`:
+       ```bash
+       gclient sync
+       ```
+  </Accordion>
+
+  <Accordion title="Tests fail to run">
+    Verify your test configuration matches your build:
+
+    - For ARM64 release: `-nvm-fuchsia-release-arm64`
+    - For ARM64 debug: `-nvm-fuchsia-debug-arm64`
+    - For x64 release: `-nvm-fuchsia-release-x64`
+
+    The architecture and mode in the test name must match your build.
+  </Accordion>
+
+  <Accordion title="Slow build times">
+    Speed up builds by:
+
+    1. Building only the runtime (omit `create_sdk`):
+       ```bash
+       ./tools/build.py --mode=release --os=fuchsia --arch=arm64 runtime
+       ```
+
+    2. Using a local filesystem for output (see [Build Performance Tips](/building/overview#build-performance-tips))
+
+    3. Building in release mode (faster than debug)
+  </Accordion>
+</AccordionGroup>
+
+## Fuchsia-Specific Considerations
+
+### Fuchsia SDK Version
+
+The Fuchsia SDK version is managed by the `DEPS` file in the Dart SDK. When you run `gclient sync`, it downloads the specific Fuchsia SDK version pinned in DEPS.
+
+### Component Model
+
+Fuchsia uses a component-based architecture. When deploying Dart applications to Fuchsia, you'll need to package them as Fuchsia components. This build process creates the Dart runtime that can be included in such components.
+
+### System Libraries
+
+The Fuchsia build links against Fuchsia's system libraries. The build system automatically handles this when you specify `--os=fuchsia`.
+
+## Integration with Fuchsia Development
+
+If you're developing Fuchsia itself and want to integrate a custom Dart build:
+
+1. Build the Dart runtime for Fuchsia as shown above
+2. The build output can be integrated into Fuchsia's build system
+3. Refer to Fuchsia's documentation for details on integrating prebuilt components
+
+<Note>
+For full Fuchsia development workflows, consult the [Fuchsia documentation](https://fuchsia.dev/) in addition to this guide.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Build from Source" icon="hammer" href="/building/from-source">
+    General build instructions for all platforms
+  </Card>
+  <Card title="Testing" icon="flask" href="/development/testing">
+    Learn about testing the Dart SDK
+  </Card>
+  <Card title="ARM/RISC-V" icon="microchip" href="/building/for-arm-risc-v">
+    Build for other architectures
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/development/contributing">
+    Contribute to the Dart SDK
+  </Card>
+</CardGroup>

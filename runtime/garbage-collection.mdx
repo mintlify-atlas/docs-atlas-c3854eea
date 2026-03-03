@@ -1,0 +1,320 @@
+---
+title: Garbage Collection
+description: Implementation details of the Dart VM's generational garbage collector with parallel scavenge and concurrent mark-sweep
+---
+
+The Dart VM uses a **generational garbage collector** with two generations and both parallel and concurrent collection phases.
+
+## GC Architecture
+
+The GC consists of:
+
+- **New generation** - Collected by parallel, stop-the-world **semispace scavenger**
+- **Old generation** - Collected by **concurrent-mark concurrent-sweep** or **concurrent-mark parallel-compact**
+
+## Object Representation for GC
+
+### Pointer Tagging
+
+Object pointers are distinguished by tag bits:
+
+| Pointer Value | Referent |
+|---------------|----------|
+| `0x00000002` | Small integer 1 (Smi) |
+| `0xFFFFFFFE` | Small integer -1 (Smi) |
+| `0x00A00001` | Heap object at 0x00A00000, in old-space |
+| `0x00B00005` | Heap object at 0x00B00004, in new-space |
+
+- **Smis** have tag `0` (LSB = 0)
+- **Heap objects** have tag `1` (LSB = 1)
+
+### Generation Identification
+
+Heap objects are allocated with specific alignment:
+
+- **Old-space** - Double-word aligned (`address % double-word == 0`)
+- **New-space** - Offset from double-word alignment (`address % double-word == word`)
+
+This allows checking an object's generation without loading boundary addresses from thread-local storage.
+
+## Safepoints
+
+A **mutator** is any thread that can allocate, read, or write to the heap.
+
+Some GC phases require mutators to stop accessing the heap - these are **safepoint operations**:
+
+- Marking roots at the start of concurrent marking
+- The entirety of a scavenge
+- Installing optimized code
+
+At a safepoint:
+- Mutators stop accessing the heap
+- No pointers into the heap held (except via handles)
+- Runtime code holds only handles, not `ObjectPtr` or `UntaggedObject`
+
+### Thread States
+
+Thread state is tracked via `Thread::ExecutionState`:
+
+| State | At Safepoint? | Description |
+|-------|---------------|-------------|
+| `kThreadInNative` | Yes | Executing external native code |
+| `kThreadInBlockedState` | Yes | Blocked on a lock |
+| `kThreadInVM` | No | Executing C++ VM code |
+| `kThreadInGenerated` | No | Executing compiled Dart code |
+
+<Warning>
+Safepoint operations can begin only when all threads are in a safe state (native or blocked).
+</Warning>
+
+## Scavenge (New Generation GC)
+
+The new generation is collected using **Cheney's semispace algorithm**.
+
+### Parallel Scavenge
+
+By default, 2 scavenger tasks run on separate threads (`FLAG_scavenger_tasks`):
+
+1. Workers compete to process the root set (including remembered set)
+2. When a worker copies an object to to-space:
+   - Allocates from worker-local bump region
+   - Same worker processes the copied object
+3. When promoting to old-space:
+   - Allocates from worker-local freelist
+   - Promoted object added to work-stealing queue
+4. Workers use compare-and-swap to install forwarding pointers
+   - Loser un-allocates and uses winner's object
+
+Scavenge continues until all work sets are processed.
+
+### Configuration Flags
+
+```bash
+# Number of parallel scavenger tasks (-1 = auto-select based on isolates)
+--scavenger_tasks=2
+
+# New generation size configuration
+--new_gen_semi_max_size=<MB>     # Max size of new gen semi space
+--new_gen_semi_initial_size=<MB> # Initial size (default: 1MB on 32-bit, 2MB on 64-bit)
+```
+
+## Mark-Sweep (Old Generation GC)
+
+### Marking Phase
+
+All objects start with the **mark bit** clear in their header.
+
+1. Visit each root pointer
+2. If target's mark bit is clear:
+   - Set mark bit
+   - Add target to marking stack (grey set)
+3. Remove objects from marking stack and mark their children
+4. Repeat until marking stack is empty
+
+Result: All reachable objects are marked, unreachable objects remain unmarked.
+
+### Sweeping Phase
+
+Visit each object:
+
+- If mark bit is clear → Add memory to **free list** for future allocations
+- Otherwise → Clear mark bit for next cycle
+- If entire page is unreachable → Release to OS
+
+### Concurrent Marking
+
+To reduce pause times, marking runs **concurrently** with the mutator.
+
+#### Write Barrier
+
+With concurrent marking, the mutator could write a pointer to an unmarked object (TARGET) into an already-marked object (SOURCE), causing incorrect collection.
+
+The write barrier prevents this:
+
+```cpp
+StorePointer(ObjectPtr source, ObjectPtr* slot, ObjectPtr target) {
+  *slot = target;
+  if (target->IsSmi()) return;
+  if (source->IsOldObject() && !source->IsRemembered() && target->IsNewObject()) {
+    source->SetRemembered();
+    AddToRememberedSet(source);
+  } else if (!target->IsMarked() && Thread::Current()->IsMarking()) {
+    if (target->TryAcquireMarkBit()) {
+      AddToMarkList(target);
+    }
+  }
+}
+```
+
+Optimized barrier combines generational and incremental checks:
+
+```cpp
+StoreIntoObject(object, value, offset)
+  str   value, object#offset
+  tbnz  value, kSmiTagShift, done
+  lbu   tmp, value#headerOffset
+  lbu   tmp2, object#headerOffset  
+  and   tmp, tmp2 LSR kBarrierOverlapShift
+  tst   tmp, BARRIER_MASK
+  bz    done
+  mov   tmp2, value
+  lw    tmp, THR#writeBarrierEntryPointOffset
+  blr   tmp
+done:
+```
+
+#### Data Race Safety
+
+Operations use **relaxed ordering** (no synchronization):
+
+- Concurrent marker starts with acquire-release (sees all prior mutator writes)
+- Old-space objects created before marking: Marker may see old or new slot values
+  - Both are valid pointers, so no corruption
+  - May lose precision (retain dead object) but remain correct
+- Old-space objects created after marking: Allocated **black** (marked) so marker won't visit
+- New-space objects in active TLAB: Visited only during safepoint
+- New-space outside TLAB: Synchronized by store-release when switching TLABs
+
+### Configuration Flags
+
+```bash
+# Old generation GC configuration  
+--concurrent_mark=true          # Enable concurrent marking
+--concurrent_sweep=true         # Enable concurrent sweeping
+--old_gen_heap_size=<MB>        # Max old gen size (0 = unlimited)
+--marker_tasks=2                # Number of concurrent marker tasks
+
+# Compaction
+--use_compactor=false           # Use sliding compactor
+--use_incremental_compactor=true # Use incremental compactor
+--compactor_tasks=2             # Number of parallel compactor tasks
+```
+
+## Mark-Compact
+
+The VM includes a **sliding compactor** for old generation:
+
+- Compact representation: Heap divided into blocks
+- Each block records target address and surviving double-word bitvector
+- Constant-time access by masking object address to get page header
+
+Compaction eliminates fragmentation at the cost of moving objects.
+
+## Write Barrier Elimination
+
+The compiler eliminates write barrier checks when provable:
+
+### Generational Barrier
+
+Checks if `container` is old and not remembered, and `value` is new.
+
+### Incremental Barrier  
+
+Checks if `value` is not marked and marking is in progress.
+
+### Elimination Cases
+
+Barrier eliminated when:
+
+- `value` is a constant (always old and marked via constant pools)
+- `value` has static type `bool` (all values are constants: null, false, true)
+- `value` is known to be a Smi (not a heap object)
+- `value` is `container` (self-references can't cross generations/marking states)
+- `container` is newly allocated and:
+  - No GC between allocation and store, OR
+  - No new Dart frames between allocation and store
+
+```dart
+container <- AllocateObject
+<instructions that do not trigger GC>
+StoreInstanceField(container, value, NoBarrier)
+```
+
+Allocation stubs ensure new objects are either new-space or preemptively added to remembered set and marking worklist.
+
+## Weakness
+
+The GC supports various weak reference types:
+
+### Heap Objects
+
+- **WeakReference** - Weakly references a single object
+- **WeakProperty** - Ephemeron: if key is reachable, value is reachable  
+- **WeakArray** - Weakly references variable number of objects
+- **Finalizers** - Weak reference + callback when collected
+
+### Non-Heap Objects
+
+- **Dart_WeakPersistentHandle / Dart_FinalizableHandle** - C API weak references
+- **Object ID ring** - VM service object IDs (strong for minor GC, weak for major GC)
+- **Weak tables** - Weak association of objects to integers
+
+### Weak Processing
+
+1. GC traces strong references, collecting encountered weak objects
+2. When strong worklist is empty, examine WeakProperties for reachable keys
+3. Add corresponding values to worklist
+4. Repeat until worklist empty
+
+## Finalizers
+
+Two finalizer-aware object types:
+
+1. **FinalizerEntry** - Contains value, detach key, token, finalizer reference, external size
+2. **Finalizer** - Contains all entries, collected entries list, isolate reference
+
+When entry's value is GCed:
+- Entry moved to collected list
+- Message sent to invoke callback
+- Native finalizers: callback invoked immediately in GC
+
+Parallel processing:
+- Tasks use atomic exchange on collected list head
+- Mutators stopped during entry processing
+- Dart code uses atomic exchange to get collected entries
+
+<Warning>
+If a Finalizer object itself is GCed, callbacks are not run for its attachments. On isolate shutdown, native finalizers run but regular finalizers do not.
+</Warning>
+
+## Become
+
+**Become** atomically forwards object identities:
+
+- Heap walk replaces every pointer to "before" object with "after" object
+- After object gains identity hash of before object
+- Used during hot reload to map old program/instances to new
+
+Dates back to early Smalltalk implementations (O(1) via object tables).
+
+## GC Debugging and Tuning Flags
+
+```bash
+# Verbose output
+--verbose_gc=true               # Enable verbose GC logging
+--verbose_gc_hdr=40             # Print header every N GCs
+
+# Verification (release mode only)
+--verify_before_gc=true         # Verify heap before GC
+--verify_after_gc=true          # Verify heap after GC
+--verify_store_buffer=true      # Verify store buffer
+--verify_after_marking=true     # Verify heap after marking
+
+# Performance tuning
+--mark_when_idle=false          # Dart thread assists marking during idle
+--dontneed_on_sweep=false       # madvise(DONTNEED) on free regions
+
+# Abort on issues
+--abort_on_oom=false            # Abort if allocation fails
+```
+
+## Key Source Files
+
+- `runtime/vm/heap/scavenger.h` - Parallel scavenger implementation
+- `runtime/vm/heap/marker.h` - Concurrent marking
+- `runtime/vm/heap/sweeper.h` - Concurrent sweeping
+- `runtime/vm/heap/compactor.h` - Parallel compaction
+- `runtime/vm/heap/become.h` - Become implementation
+- `runtime/vm/heap/safepoint.h` - Safepoint coordination
+- `runtime/vm/heap/freelist.h` - Free list management
+- `runtime/docs/gc.md` - Detailed GC documentation

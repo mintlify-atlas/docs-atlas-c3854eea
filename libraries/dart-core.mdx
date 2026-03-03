@@ -1,0 +1,451 @@
+---
+title: dart:core
+description: Built-in types, collections, and core functionality for every Dart program
+---
+
+The `dart:core` library provides built-in types, collections, and other core functionality that forms the foundation of every Dart program. This library is **automatically imported** into every Dart file.
+
+## Overview
+
+The dart:core library includes:
+- Built-in types (numbers, strings, booleans)
+- Collections (List, Set, Map, Iterable)
+- Date and time support
+- URI handling
+- Error and exception types
+- Core annotations and utilities
+
+## Numbers and Booleans
+
+### Integer and Double Types
+
+<ParamField path="int" type="class">
+  Integer values with platform-dependent range. On native platforms, values can be from -2^63 to 2^63 - 1. On the web, integers are represented as JavaScript numbers.
+</ParamField>
+
+<ParamField path="double" type="class">
+  Double-precision floating-point numbers as specified by the IEEE 754 standard.
+</ParamField>
+
+<ParamField path="num" type="abstract class">
+  The base class for int and double. Provides common numeric operations.
+</ParamField>
+
+```dart
+int meaningOfLife = 42;
+double valueOfPi = 3.141592;
+bool visible = true;
+
+// Numeric operations
+int sum = 10 + 5;              // 15
+double quotient = 10 / 3;      // 3.333...
+int intDivision = 10 ~/ 3;     // 3
+int remainder = 10 % 3;        // 1
+```
+
+### Boolean Type
+
+<ParamField path="bool" type="class">
+  The boolean type with two values: `true` and `false`.
+</ParamField>
+
+## Strings
+
+### String Class
+
+<ParamField path="String" type="class">
+  An immutable sequence of UTF-16 code units. Strings are a core part of Dart and support both single and double quotes.
+</ParamField>
+
+```dart
+String shakespeareQuote = "All the world's a stage";
+String multiLine = '''
+  This is a
+  multi-line
+  string
+''';
+
+// String interpolation
+var name = 'Dart';
+var greeting = 'Hello, $name!';              // Hello, Dart!
+var calculation = '1 + 1 = ${1 + 1}';        // 1 + 1 = 2
+
+// String operations
+var text = 'Hello World';
+print(text.toLowerCase());                    // hello world
+print(text.toUpperCase());                    // HELLO WORLD
+print(text.contains('World'));                // true
+print(text.split(' '));                       // ['Hello', 'World']
+print(text.substring(0, 5));                  // Hello
+```
+
+### StringBuffer
+
+<ParamField path="StringBuffer" type="class">
+  Efficiently builds strings incrementally. Use when concatenating many strings to avoid creating intermediate string objects.
+</ParamField>
+
+```dart
+var buffer = StringBuffer();
+buffer.write('Hello');
+buffer.write(' ');
+buffer.write('World');
+print(buffer.toString());  // Hello World
+```
+
+### RegExp
+
+<ParamField path="RegExp" type="class">
+  Regular expressions for pattern matching in strings. Uses the same syntax as JavaScript regular expressions.
+</ParamField>
+
+```dart
+var numbers = RegExp(r'\d+');
+var text = 'I have 2 cats and 3 dogs';
+print(numbers.allMatches(text).map((m) => m.group(0)));  // (2, 3)
+
+// Check if string matches pattern
+var email = RegExp(r'^[\w-\.]+@[\w-]+\.[a-z]{2,}$');
+print(email.hasMatch('user@example.com'));  // true
+```
+
+## Collections
+
+### List
+
+<ParamField path="List<E>" type="abstract class">
+  An ordered collection of objects with a length. Lists use zero-based indexing.
+</ParamField>
+
+<Accordion title="List API Details">
+
+```dart
+// Creating lists
+var superheroes = ['Batman', 'Superman', 'Wonder Woman'];
+var numbers = <int>[1, 2, 3, 4, 5];
+var fixedList = List<int>.filled(5, 0);       // [0, 0, 0, 0, 0]
+var growableList = List<String>.empty(growable: true);
+
+// Accessing elements
+print(superheroes[0]);                         // Batman
+print(superheroes.first);                      // Batman
+print(superheroes.last);                       // Wonder Woman
+print(superheroes.length);                     // 3
+
+// Modifying lists
+superheroes.add('Flash');
+superheroes.addAll(['Aquaman', 'Cyborg']);
+superheroes.remove('Batman');
+superheroes.removeAt(0);
+superheroes.insert(0, 'Green Lantern');
+
+// List operations
+var doubled = numbers.map((n) => n * 2).toList();
+var evens = numbers.where((n) => n.isEven).toList();
+var sum = numbers.reduce((a, b) => a + b);
+```
+
+Key methods:
+- `add(E value)` - Adds value to end
+- `addAll(Iterable<E>)` - Adds all values
+- `insert(int index, E value)` - Inserts at position
+- `remove(Object value)` - Removes first occurrence
+- `removeAt(int index)` - Removes at index
+- `clear()` - Removes all elements
+- `sort([int compare(E a, E b)])` - Sorts in place
+
+</Accordion>
+
+### Set
+
+<ParamField path="Set<E>" type="abstract class">
+  An unordered collection of unique objects. Sets automatically prevent duplicates.
+</ParamField>
+
+<Accordion title="Set API Details">
+
+```dart
+// Creating sets
+var villains = {'Joker', 'Lex Luthor'};
+var emptySet = <String>{};
+var fromList = Set<int>.from([1, 2, 2, 3, 3]);  // {1, 2, 3}
+
+// Adding elements
+villains.add('Joker');          // No effect, already exists
+villains.add('Riddler');        // Added
+print(villains.length);         // 3
+
+// Set operations
+var set1 = {1, 2, 3};
+var set2 = {3, 4, 5};
+
+print(set1.union(set2));         // {1, 2, 3, 4, 5}
+print(set1.intersection(set2));  // {3}
+print(set1.difference(set2));    // {1, 2}
+print(set1.contains(2));         // true
+```
+
+</Accordion>
+
+### Map
+
+<ParamField path="Map<K, V>" type="abstract class">
+  An unordered collection of key-value pairs. Each key can occur only once.
+</ParamField>
+
+<Accordion title="Map API Details">
+
+```dart
+// Creating maps
+var sidekicks = {
+  'Batman': 'Robin',
+  'Superman': 'Lois Lane',
+  'Spider-Man': 'Mary Jane'
+};
+
+var emptyMap = <String, int>{};
+var scores = Map<String, int>();
+
+// Accessing values
+print(sidekicks['Batman']);              // Robin
+print(sidekicks['Unknown']);             // null
+print(sidekicks.containsKey('Batman'));  // true
+
+// Modifying maps
+sidekicks['Wonder Woman'] = 'Steve Trevor';
+sidekicks.remove('Superman');
+sidekicks.clear();
+
+// Iterating
+var capitals = {'USA': 'Washington', 'France': 'Paris'};
+capitals.forEach((country, city) {
+  print('Capital of $country is $city');
+});
+
+// Map operations
+var keys = capitals.keys;        // ('USA', 'France')
+var values = capitals.values;    // ('Washington', 'Paris')
+var entries = capitals.entries;  // (MapEntry('USA', 'Washington'), ...)
+```
+
+Key methods:
+- `operator [](K key)` - Gets value for key
+- `operator []=(K key, V value)` - Sets value for key
+- `putIfAbsent(K key, V ifAbsent())` - Adds if key absent
+- `remove(K key)` - Removes entry
+- `containsKey(K key)` - Checks for key
+- `containsValue(V value)` - Checks for value
+
+</Accordion>
+
+### Iterable
+
+<ParamField path="Iterable<E>" type="abstract class">
+  A collection of values that can be accessed sequentially. Base interface for List and Set.
+</ParamField>
+
+```dart
+var numbers = [1, 2, 3, 4, 5];
+
+// Transform operations
+var doubled = numbers.map((n) => n * 2);           // (2, 4, 6, 8, 10)
+var evens = numbers.where((n) => n.isEven);        // (2, 4)
+var expanded = numbers.expand((n) => [n, n]);      // (1, 1, 2, 2, 3, 3, ...)
+
+// Reduction operations
+var sum = numbers.reduce((a, b) => a + b);         // 15
+var product = numbers.fold(1, (a, b) => a * b);    // 120
+
+// Testing
+var hasEven = numbers.any((n) => n.isEven);        // true
+var allPositive = numbers.every((n) => n > 0);     // true
+
+// Element access
+var first = numbers.first;                          // 1
+var last = numbers.last;                            // 5
+var firstEven = numbers.firstWhere((n) => n.isEven); // 2
+```
+
+## Date and Time
+
+### DateTime
+
+<ParamField path="DateTime" type="class">
+  Represents an instant in time. Can work with both UTC and local time zones.
+</ParamField>
+
+```dart
+// Current time
+var now = DateTime.now();
+var utcNow = DateTime.now().toUtc();
+
+// Creating specific dates
+var birthday = DateTime(1995, 5, 15);
+var meeting = DateTime(2024, 3, 1, 14, 30);  // 2:30 PM
+
+// Parsing dates
+var parsed = DateTime.parse('2024-03-01 14:30:00');
+
+// Date arithmetic
+var tomorrow = now.add(Duration(days: 1));
+var lastWeek = now.subtract(Duration(days: 7));
+var difference = tomorrow.difference(now);  // Duration
+
+// Comparisons
+if (birthday.isBefore(now)) {
+  print('Birthday has passed');
+}
+```
+
+### Duration
+
+<ParamField path="Duration" type="class">
+  Represents a span of time, such as 3 days or 2 hours.
+</ParamField>
+
+```dart
+var duration = Duration(
+  days: 1,
+  hours: 12,
+  minutes: 30,
+  seconds: 45,
+);
+
+print(duration.inDays);      // 1
+print(duration.inHours);     // 36
+print(duration.inMinutes);   // 2190
+
+// Duration arithmetic
+var longer = duration + Duration(hours: 6);
+var shorter = duration - Duration(minutes: 30);
+var doubled = duration * 2;
+```
+
+## URI
+
+<ParamField path="Uri" type="class">
+  Represents a Uniform Resource Identifier. Used for URLs and URIs.
+</ParamField>
+
+```dart
+// Parsing URIs
+var uri = Uri.parse('https://example.com/path?query=value#fragment');
+
+print(uri.scheme);      // https
+print(uri.host);        // example.com
+print(uri.path);        // /path
+print(uri.query);       // query=value
+print(uri.fragment);    // fragment
+
+// Building URIs
+var built = Uri(
+  scheme: 'https',
+  host: 'api.example.com',
+  path: '/users',
+  queryParameters: {'page': '1', 'limit': '10'},
+);
+print(built);  // https://api.example.com/users?page=1&limit=10
+
+// Encoding/decoding
+var encoded = Uri.encodeComponent('hello world');  // hello%20world
+var decoded = Uri.decodeComponent('hello%20world'); // hello world
+```
+
+## Errors and Exceptions
+
+### Exception Types
+
+<Accordion title="Common Exception Types">
+
+<ParamField path="Exception" type="abstract class">
+  Base class for application-level errors that are intended to be caught.
+</ParamField>
+
+<ParamField path="Error" type="class">
+  Base class for programming errors that should typically not be caught.
+</ParamField>
+
+Common exceptions:
+- `FormatException` - Invalid string format
+- `RangeError` - Value out of valid range
+- `ArgumentError` - Invalid argument to function
+- `StateError` - Invalid object state
+- `UnsupportedError` - Unsupported operation
+
+```dart
+// Throwing exceptions
+throw FormatException('Invalid email format');
+throw ArgumentError.value(value, 'age', 'Must be positive');
+
+// Custom exceptions
+class NetworkException implements Exception {
+  final String message;
+  NetworkException(this.message);
+  
+  @override
+  String toString() => 'NetworkException: $message';
+}
+```
+
+</Accordion>
+
+## Symbols and Annotations
+
+### Common Annotations
+
+<ParamField path="@deprecated" type="annotation">
+  Marks a declaration as deprecated. Causes warnings when used.
+</ParamField>
+
+<ParamField path="@override" type="annotation">
+  Indicates that a member overrides a superclass member.
+</ParamField>
+
+```dart
+class Example {
+  @deprecated
+  void oldMethod() {
+    // This method is deprecated
+  }
+  
+  @override
+  String toString() => 'Example instance';
+}
+```
+
+## Platform Detection
+
+Check platform at compile time:
+
+```dart
+import 'dart:io' show Platform;
+
+void checkPlatform() {
+  if (Platform.isLinux) {
+    print('Running on Linux');
+  } else if (Platform.isMacOS) {
+    print('Running on macOS');
+  } else if (Platform.isWindows) {
+    print('Running on Windows');
+  }
+}
+```
+
+## Best Practices
+
+<Warning>
+1. Use `const` constructors when creating compile-time constants
+2. Prefer `final` for variables that won't change
+3. Use type annotations for public APIs
+4. Leverage collection literals (`[]`, `{}`, `<>[]`) over constructors
+</Warning>
+
+<Tip>
+The dart:core library is optimized and fundamental to Dart. Understanding these core types and collections is essential for writing idiomatic Dart code.
+</Tip>
+
+## Related Libraries
+
+- [dart:collection](https://api.dart.dev/stable/dart-collection/dart-collection-library.html) - Additional collection types
+- [dart:convert](https://api.dart.dev/stable/dart-convert/dart-convert-library.html) - JSON and other encoders/decoders
+- [dart:math](https://api.dart.dev/stable/dart-math/dart-math-library.html) - Mathematical functions and constants

@@ -1,0 +1,162 @@
+---
+title: Contributing to Dart SDK
+description: Learn how to contribute code, documentation, and bug reports to the Dart SDK project
+---
+
+Want to contribute? Great! You can help the Dart project in many ways, from reporting bugs to submitting code changes.
+
+## Ways to Contribute
+
+You can help the Dart project in several ways:
+
+- **Report bugs** at [dartbug.com](https://dartbug.com)
+- **Answer questions** on [Stack Overflow](https://stackoverflow.com/questions/tagged/dart)
+- **Improve documentation** on [dart.dev](https://dart.dev) or API docs
+- **Contribute code** via Gerrit or GitHub pull requests
+
+### Documentation Contributions
+
+You have three options for improving documentation:
+
+1. **Give feedback**: Click the bug icon on documentation pages or [create an SDK issue](https://github.com/dart-lang/sdk/issues/new?title=API%20doc%20issue:)
+2. **Contribute to websites**: Help improve [dart.dev](https://dart.dev) via the [dart-lang/site-www](https://github.com/dart-lang/site-www) repo
+3. **Improve API docs**: Edit doc comments in the [Dart SDK repo](https://github.com/dart-lang/sdk/tree/main/sdk/lib)
+
+## Before You Contribute
+
+### Sign the CLA
+
+Before we can use your code, you must sign the [Google Individual Contributor License Agreement](https://developers.google.com/open-source/cla/individual) (CLA). You don't need to sign until after your code is approved for review, but it must be done before we can merge your contribution.
+
+<Note>
+For corporate contributions, use the [Software Grant and Corporate Contributor License Agreement](https://cla.developers.google.com/about/google-corporate).
+</Note>
+
+### Coordinate Large Changes
+
+For larger contributions, get in touch through the [Dart Issue Tracker](https://dartbug.com) first. Coordinating up front helps avoid frustration later.
+
+## Setting Up Your Environment
+
+<Steps>
+  <Step title="Install depot_tools">
+    Install the Chromium [depot_tools](https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up) to work with the Dart codebase.
+  </Step>
+  
+  <Step title="Get the source code">
+    Use `gclient` to download the code. **Do not use `git clone` directly** - it won't give you a functional environment.
+    
+    See [Building from Source](/building/from-source) for complete instructions.
+  </Step>
+</Steps>
+
+## Submitting Code Changes
+
+### Using GitHub Pull Requests
+
+While Gerrit is the primary code review system, you can submit GitHub PRs for smaller changes like documentation edits:
+
+1. Create a PR on [GitHub](https://github.com/dart-lang/sdk/pulls)
+2. The copybara-service bot automatically converts it to a Gerrit CL
+3. Find the Gerrit CL link in the bot's comment
+4. The PR closes automatically when the CL is merged
+
+<Warning>
+Administrators must NEVER merge GitHub PRs directly - this breaks repository mirroring.
+</Warning>
+
+### Using Gerrit (Recommended)
+
+<Steps>
+  <Step title="Create a branch">
+    ```bash
+    git new-branch <feature-name>
+    ```
+  </Step>
+  
+  <Step title="Write and commit code">
+    ```bash
+    # Write code
+    git commit
+    # Continue developing
+    git commit
+    ```
+  </Step>
+  
+  <Step title="Keep branch updated">
+    ```bash
+    git rebase-update
+    ```
+    
+    This fetches `origin/main`, rebases your branches, and deletes merged branches.
+  </Step>
+  
+  <Step title="Upload for review">
+    ```bash
+    # Upload CL with reviewers and auto-submit
+    git cl upload --send-mail --r-owners --auto-submit
+    ```
+    
+    Attach the review URL to your issue at [dartbug.com](https://dartbug.com).
+  </Step>
+  
+  <Step title="Update the CL">
+    To update your CL after feedback:
+    
+    ```bash
+    # Make changes
+    git commit
+    # Upload updated version
+    git cl upload
+    ```
+  </Step>
+</Steps>
+
+## Code Review Process
+
+All submissions require review, including those from project members.
+
+### Getting Reviewers
+
+```bash
+# Open your CL in browser
+git cl web
+```
+
+Ensure you have at least two reviewers who are OWNERS. Use the "ADD OWNERS" button if needed. If reviewers aren't responsive, add reviewers from the root `OWNERS` file to escalate.
+
+### Submitting the Patch
+
+For committers:
+
+1. Press "Submit to CQ" (Commit Queue) on [dart-review.googlesource.com](https://dart-review.googlesource.com)
+2. Monitor progress in the "Tryjobs" panel
+3. Once CQ is green, the patch merges automatically
+4. Fix any red try jobs and resubmit
+
+For non-committers, a Dart engineer will submit on your behalf once approved.
+
+## Coding Style
+
+Follow these style guides:
+
+- **C++ code**: [Google C++ style guide](https://google.github.io/styleguide/cppguide.html)
+- **Dart code**: [Dart style guide](https://dart.dev/guides/language/effective-dart/style)
+
+### File Headers
+
+All files must start with this header:
+
+```dart
+// Copyright (c) 2024, the Dart project authors. Please see the AUTHORS file
+// for details. All rights reserved. Use of this source code is governed by a
+// BSD-style license that can be found in the LICENSE file.
+```
+
+<Note>
+Use a single year (not a range). When editing existing files, you don't need to update the year.
+</Note>
+
+## Code of Conduct
+
+We pledge to maintain an open and welcoming environment. See our [code of conduct](https://dart.dev/code-of-conduct) for details.

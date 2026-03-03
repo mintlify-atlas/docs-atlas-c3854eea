@@ -1,0 +1,286 @@
+---
+title: Experimental Flags
+description: Understanding and managing experimental feature flags in the Dart SDK
+---
+
+Experimental flags control the availability of new Dart language features during development. This guide is for SDK developers working on implementing and retiring these flags.
+
+<Note>
+For information about **using** experimental flags as a Dart developer, see the [experiment flags documentation](https://dart.dev/tools/experiment-flags).
+</Note>
+
+## Overview
+
+Experimental flags allow new features to be:
+
+- Developed and tested while disabled by default
+- Gradually rolled out to users through beta releases
+- Enabled by default once stable
+- Retired after proven stable in production
+
+## Flag Definition
+
+All experimental flags are defined in:
+
+```
+tools/experimental_features.yaml
+```
+
+This YAML file specifies:
+
+- Flag names and descriptions
+- SDK version requirements
+- Default enabled/disabled status
+- Expiration status
+
+## Feature Lifecycle
+
+The typical lifecycle of an experimental feature spans multiple SDK versions:
+
+<Steps>
+  <Step title="Development phase (Version n-1)">
+    - Feature is developed behind a flag
+    - Flag is disabled by default
+    - Usually made public in **beta 1 of version n-1**
+    - Users can enable with `--enable-experiment=feature-name`
+  </Step>
+  
+  <Step title="Default enabled (Version n)">
+    - Feature flag is **enabled by default in beta 1 of version n**
+    - Feature is still technically "experimental" but available to all
+    - Monitor for issues and user feedback
+  </Step>
+  
+  <Step title="Stabilization (Version n)">
+    - Feature runs in production for a full release cycle (~3 months)
+    - Must not cause significant issues
+    - Considered stable if feedback is positive
+  </Step>
+  
+  <Step title="Retirement (Version n+1)">
+    - Flag is **retired in beta 1 of version n+1**
+    - Feature is now permanent, flag has no effect
+    - Cleanup work begins
+  </Step>
+</Steps>
+
+### Timeline Example
+
+Here's a concrete example for a hypothetical feature:
+
+<CodeGroup>
+```text Dart 6.1 Beta 1
+--enable-experiment=telepathy available
+Feature is OFF by default
+Users can opt-in for testing
+```
+
+```text Dart 6.2 Beta 1  
+Feature enabled by default
+No flag needed (but still accepted)
+Monitoring for stability
+```
+
+```text Dart 6.2 Stable
+Feature ships to all users
+Runs for ~3 months in production
+```
+
+```text Dart 6.3 Beta 1
+Flag is retired (expired: true)
+Feature is permanent
+Cleanup begins
+```
+</CodeGroup>
+
+<Note>
+Development timelines vary. Some features span multiple versions, while others complete within a single release cycle and only appear in dev releases.
+</Note>
+
+## When to Retire Flags
+
+Retire an experimental flag when:
+
+1. ✅ Feature has been enabled by default for a full release cycle
+2. ✅ At least ~3 months have passed in stable
+3. ✅ No significant issues have been reported
+4. ✅ User feedback is positive
+
+<Warning>
+Don't retire flags prematurely. Give features time to prove stability in production.
+</Warning>
+
+## Flag Retirement Process
+
+<Steps>
+  <Step title="Clean up test usage">
+    Remove or update tests that use the experimental flag:
+    
+    ```bash
+    # Find tests using the flag
+    grep -r "--enable-experiment=feature-name" tests/
+    
+    # Update tests to remove flag usage
+    ```
+    
+    Tests should work without the flag since it's enabled by default.
+  </Step>
+  
+  <Step title="Clean up non-test code">
+    Ensure SDK code doesn't rely on checking the experimental flag:
+    
+    ```bash
+    # Search for flag references in source
+    grep -r "feature-name" sdk/ pkg/
+    ```
+    
+    Remove conditional logic based on the flag.
+  </Step>
+  
+  <Step title="Verify package tests">
+    Check that tests in `/pkg/*` don't rely on the flag:
+    
+    ```bash
+    grep -r "enable-experiment" pkg/
+    ```
+  </Step>
+  
+  <Step title="Mark flag as expired">
+    Edit `tools/experimental_features.yaml`:
+    
+    ```yaml
+    feature-name:
+      help: "Enable the telepathy feature"
+      enabledIn: '6.2'
+      expired: true  # Add this line
+    ```
+  </Step>
+  
+  <Step title="Update generated code">
+    Run the update scripts to regenerate flag-handling code:
+    
+    ```bash
+    # Scripts that regenerate flag code
+    ./tools/generate_experimental_flags.dart
+    ```
+  </Step>
+  
+  <Step title="Alert EngProd team">
+    Notify the Engineering Productivity team that retirement is complete.
+    
+    They will coordinate:
+    - Final verification
+    - SDK version increment
+    - Release notes updates
+  </Step>
+</Steps>
+
+## Common Flag Patterns
+
+### Checking Flag Status in Code
+
+During development, you may need to check if a flag is enabled:
+
+```dart
+// Analyzer
+if (analysisContext.analysisOptions.experimentStatus.feature-name) {
+  // Feature-specific behavior
+}
+
+// CFE
+if (experimentalFlags.featureName) {
+  // Feature-specific behavior  
+}
+```
+
+<Warning>
+Remove these conditionals during flag retirement. The feature should always be active.
+</Warning>
+
+### Test Annotations
+
+Tests may require specific experiments:
+
+```dart
+// @dart=2.19
+// @dart=3.0
+// @Experiments=feature-name
+
+main() {
+  // Test code
+}
+```
+
+Remove experiment annotations when retiring flags.
+
+## Finding Flag Usage
+
+Useful commands for finding flag references:
+
+```bash
+# Find flag in tests
+grep -r "enable-experiment=feature-name" tests/
+
+# Find flag in analysis options
+find . -name "analysis_options.yaml" -exec grep -l "feature-name" {} \;
+
+# Find flag in source code
+rg "feature-name" sdk/ pkg/ --type dart
+
+# Find experiment annotations
+grep -r "@Experiments" tests/
+```
+
+## Exceptions and Special Cases
+
+### Short Development Cycles
+
+Some features complete development quickly:
+
+- Development happens entirely in dev releases
+- Never available in beta or stable with flag
+- Enabled by default immediately upon completion
+- Can be retired in the next release
+
+### Extended Development
+
+Large features may take multiple releases:
+
+- Null safety took several versions to complete
+- Flag may exist across many SDK versions
+- Multiple beta cycles for user feedback
+- Extended stabilization period
+
+### Deprioritized Features
+
+If feature development is paused:
+
+- Keep flag disabled by default
+- Don't retire until development resumes and completes
+- Document the status in the YAML file
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Document thoroughly" icon="book">
+    Add clear comments in `experimental_features.yaml` about the feature's purpose and status
+  </Card>
+  
+  <Card title="Test both states" icon="flask">
+    During development, test with flag both enabled and disabled
+  </Card>
+  
+  <Card title="Clean as you go" icon="broom">
+    Remove flag dependencies during retirement, don't accumulate technical debt
+  </Card>
+  
+  <Card title="Coordinate releases" icon="calendar">
+    Work with EngProd team to align flag retirement with release milestones
+  </Card>
+</CardGroup>
+
+## Resources
+
+- [experimental_features.yaml](https://github.com/dart-lang/sdk/blob/main/tools/experimental_features.yaml) - Flag definitions
+- [Public experiment docs](https://dart.dev/tools/experiment-flags) - User-facing documentation
+- [Language evolution process](https://github.com/dart-lang/language/blob/master/doc/life_of_a_language_feature.md) - How features are designed

@@ -1,122 +1,169 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Dart SDK",
+  "theme": "palm",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#0175C2",
+    "light": "#13B9FD",
+    "dark": "#01579B"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/dart-lang/sdk"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/dart-lang/sdk"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Building the SDK",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "building/overview",
+              "building/dependencies",
+              "building/from-source",
+              "building/for-arm-risc-v",
+              "building/for-android",
+              "building/for-fuchsia"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "concepts/dart-vm",
+              "concepts/compilation",
+              "concepts/isolates",
+              "concepts/snapshots"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Compilers",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "compilers/overview",
+              "compilers/dart2js",
+              "compilers/dart2wasm",
+              "compilers/dartdevc",
+              "compilers/aot-jit"
+            ]
+          },
+          {
+            "group": "Core Libraries",
+            "pages": [
+              "libraries/overview",
+              "libraries/dart-core",
+              "libraries/dart-async",
+              "libraries/dart-io",
+              "libraries/dart-ffi",
+              "libraries/dart-html",
+              "libraries/dart-isolate"
+            ]
+          },
+          {
+            "group": "Runtime & VM",
+            "pages": [
+              "runtime/overview",
+              "runtime/object-model",
+              "runtime/garbage-collection",
+              "runtime/optimization",
+              "runtime/vm-flags"
+            ]
+          },
+          {
+            "group": "Tools & CLI",
+            "pages": [
+              "tools/dart-command",
+              "tools/analyzer",
+              "tools/formatter",
+              "tools/pub",
+              "tools/devtools"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "development/contributing",
+              "development/testing",
+              "development/debugging",
+              "development/experimental-flags"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "VM C API",
             "pages": [
-              "api-reference/introduction"
+              "api/dart-api",
+              "api/native-extensions",
+              "api/embedding"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Compiler Internals",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/il-instructions",
+              "api/optimization-passes",
+              "api/code-generation"
+            ]
+          },
+          {
+            "group": "Kernel Format",
+            "pages": [
+              "api/kernel-overview",
+              "api/kernel-ast",
+              "api/kernel-transformations"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Contributing",
+        "groups": [
+          {
+            "group": "Contribution Guide",
+            "pages": [
+              "contributing/getting-started",
+              "contributing/code-review",
+              "contributing/commit-guidelines",
+              "contributing/testing-requirements"
+            ]
+          },
+          {
+            "group": "Processes",
+            "pages": [
+              "contributing/branches-releases",
+              "contributing/cherry-picks",
+              "contributing/filing-issues",
+              "contributing/triaging"
+            ]
+          },
+          {
+            "group": "Maintenance",
+            "pages": [
+              "contributing/package-maintenance",
+              "contributing/dependencies",
+              "contributing/flutter-packages"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

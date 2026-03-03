@@ -1,0 +1,252 @@
+---
+title: Code Review Workflow
+description: Learn how to submit and manage code reviews using GitHub and Gerrit
+---
+
+The Dart SDK uses both GitHub pull requests and Gerrit for code reviews. This guide covers both workflows.
+
+## GitHub Workflow
+
+For simple changes like documentation updates, you can submit a GitHub pull request.
+
+<Steps>
+
+<Step title="Fork and create a pull request">
+Fork the repository and create a pull request from your forked repo. Follow the [GitHub forking guide](https://help.github.com/articles/fork-a-repo) for detailed instructions.
+</Step>
+
+<Step title="Automatic conversion to Gerrit">
+Your GitHub PR will be automatically converted into a Gerrit change list (CL) by a copybara-service bot. The bot will leave a comment on your PR with a link to the Gerrit CL.
+</Step>
+
+<Step title="Review and updates">
+Any changes made to the PR after opening will also be synced by the bot into the Gerrit review.
+</Step>
+
+<Step title="Automatic closure">
+The PR will be automatically closed when the CL is reviewed and landed.
+</Step>
+
+</Steps>
+
+## Gerrit Workflow
+
+The primary code review workflow uses Gerrit. This is the recommended approach for most contributions.
+
+### Prerequisites
+
+Before starting, ensure you have:
+- Installed [depot_tools](https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up)
+- [Checked out the source code](https://github.com/dart-lang/sdk/blob/main/docs/Building.md#getting-the-source) using `gclient`
+
+### Verify git-cl Configuration
+
+There is a `codereview.settings` file in the repo to configure things automatically:
+
+```bash
+cat codereview.settings
+```
+
+Expected output:
+
+```
+# This file is used by gcl to get repository specific information.
+GERRIT_HOST: True
+CODE_REVIEW_SERVER: https://dart-review.googlesource.com
+VIEW_VC: https://dart.googlesource.com/sdk/+
+CC_LIST: reviews@dartlang.org
+```
+
+### Creating and Uploading a Change
+
+<Steps>
+
+<Step title="Create a branch">
+Create a new branch for your changes. We recommend using your username as a prefix:
+
+```bash
+cd sdk
+git checkout -b uname_example
+```
+
+Alternatively, use `git new-branch`:
+
+```bash
+git new-branch <feature-name>
+```
+</Step>
+
+<Step title="Make your changes">
+Write your code and commit locally:
+
+```bash
+echo "file contents" > awesome_example.txt
+git add awesome_example.txt
+git commit -a -m "An awesome commit, for an awesome example."
+```
+</Step>
+
+<Step title="Upload to Gerrit">
+Upload the patch to Gerrit for review using `git cl upload`:
+
+```bash
+# Upload a CL, add reviewers from OWNERS files, and allow automatic submission
+git cl upload --send-mail --r-owners --auto-submit
+```
+
+The command returns a URL for the review. Attach this review to your issue in https://dartbug.com.
+</Step>
+
+<Step title="Open the review">
+Open your CL in a browser:
+
+```bash
+git cl web
+```
+
+Then click on the **Start Review** button to send email to the reviewers from the Gerrit website.
+</Step>
+
+</Steps>
+
+### Updating Your Change
+
+To update the CL after review feedback:
+
+<Steps>
+
+<Step title="Make changes">
+Update your code based on review comments:
+
+```bash
+echo "better file contents" > awesome_example.txt
+git commit -a -m "An awesomer commit"
+```
+</Step>
+
+<Step title="Upload the update">
+Upload the new version:
+
+```bash
+git cl upload origin/main
+```
+
+Or with the full options:
+
+```bash
+git cl upload --send-mail --r-owners --auto-submit
+```
+</Step>
+
+</Steps>
+
+### Syncing with Latest Changes
+
+If new changes have been made to the repo, sync up before submitting your code.
+
+**Option 1: Merging**
+
+```bash
+git pull origin main
+git cl upload origin/main
+```
+
+**Option 2: Rebasing (Recommended)**
+
+```bash
+git pull --rebase origin main
+git cl upload origin/main
+```
+
+Or use `git rebase-update` from any branch:
+
+```bash
+git rebase-update
+```
+
+### Getting Your Change Reviewed
+
+<Steps>
+
+<Step title="Ensure you have reviewers">
+Ensure your change has at least two reviewers who are OWNERS on your CL:
+
+```bash
+git cl web  # opens your review on https://dart-review.googlesource.com
+```
+
+Check the "Reviewers" on the CL. There should be at least two.
+</Step>
+
+<Step title="Add more reviewers if needed">
+If there aren't enough reviewers, use the **ADD OWNERS** button to add more.
+
+If you can't get enough reviewers, or the reviewers are not responsive, you may add reviewers found in the `OWNERS` file at the root of the repository to escalate.
+</Step>
+
+<Step title="Code owner review">
+It's part of a code owner's responsibility to review changes in their area and help you get your patch submitted. They may:
+- Provide comments
+- Reject your CL
+- Run the presubmit tests on your behalf
+- Submit your patch
+</Step>
+
+</Steps>
+
+## For Committers: Submitting a Patch
+
+If you have commit access, when the review is done and the patch is ready:
+
+<Steps>
+
+<Step title="Submit to CQ">
+On https://dart-review.googlesource.com, press **Submit to CQ** (CQ stands for "Commit Queue").
+</Step>
+
+<Step title="Monitor tryjobs">
+You can follow the progress by looking at the **Tryjobs** panel in your review.
+</Step>
+
+<Step title="Merge or fix">
+- Once the Commit Queue is green, the patch will be merged
+- If any of the try jobs is red, you will have to fix the errors and then **Submit to CQ** once more
+</Step>
+
+</Steps>
+
+<Info>
+If you do not have commit access, a Dart engineer will commit on your behalf, assuming the patch is reviewed and accepted.
+</Info>
+
+### Alternative: Using git cl land
+
+You can also submit directly from the command line:
+
+```bash
+git cl land origin/main
+```
+
+This command will close the issue in Gerrit and submit your code directly on main.
+
+## Merging Contributions from Non-Committers
+
+If the author of a patch is not a committer, they will need help landing the patch.
+
+Once a patch gets an LGTM:
+
+1. Find and open the review on https://dart-review.googlesource.com
+2. Follow the submission instructions above to submit the patch
+
+## Cleaning Up
+
+After submitting, delete your local branch to keep the repo clean:
+
+```bash
+git checkout main
+git branch -D uname_example  # delete local branch
+```
+
+## Additional Resources
+
+For more detailed instructions on the `git cl` tools, visit the [depot_tools tutorial](https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_creating_uploading_a_cl).

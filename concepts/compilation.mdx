@@ -1,0 +1,340 @@
+---
+title: Compilation Modes
+description: Deep dive into Dart's JIT, AOT, and snapshot compilation strategies
+---
+
+## Overview
+
+The Dart VM supports multiple compilation strategies, each optimized for different use cases:
+
+- **JIT (Just-in-Time)** - Compiles code during execution with adaptive optimization
+- **AOT (Ahead-of-Time)** - Pre-compiles code to machine code before execution
+- **Snapshots** - Serialized heap state for fast startup
+
+<Info>
+The main difference between compilation modes is **when and how** the VM converts Dart source to executable code. The runtime environment remains the same.
+</Info>
+
+## Just-in-Time (JIT) Compilation
+
+JIT compilation happens dynamically as the program runs, enabling adaptive optimization based on actual execution patterns.
+
+### Unoptimizing Compiler
+
+When a function is first called, it's compiled by the **unoptimizing compiler** for fast code generation:
+
+```
+ Kernel AST            Unoptimized IL            Machine Code
+╭──────────────╮      ╭──────────────────╮      ╭─────────────────────╮
+│ FunctionNode │      │ LoadLocal('a')   │      │ push [rbp + ...]    │
+│              │      │ LoadLocal('b')   │      │ push [rbp + ...]    │
+│ (a, b) =>    │ ┣━━▶ │ InstanceCall('+')│ ┣━━▶ │ call InlineCacheStub│
+│   a + b;     │      │ Return           │      │ retq                │
+╰──────────────╯      ╰──────────────────╯      ╰─────────────────────╯
+```
+
+**Two-Pass Process:**
+
+1. **CFG Generation**: Walk the Kernel AST to build a Control Flow Graph with Intermediate Language (IL) instructions
+2. **Code Generation**: Directly lower IL to machine code using one-to-many instruction mapping
+
+<Note>
+The unoptimizing compiler prioritizes speed over optimization. It produces executable code quickly without any optimizations.
+</Note>
+
+### Lazy Compilation
+
+Functions start with a placeholder pointing to `LazyCompileStub`:
+
+```
+┌──────────┐
+│ Function │
+│          │     LazyCompileStub
+│  code_ ━━━━━━▶ ┌─────────────────────────────┐
+│          │     │ code = CompileFunction(...) │
+└──────────┘     │ return code(...);           │
+                 └─────────────────────────────┘
+```
+
+When first called, the stub compiles the function and tail-calls the generated code.
+
+### Inline Caching
+
+Since unoptimized code doesn't resolve calls statically, the VM uses **inline caching** for dynamic dispatch:
+
+```dart
+class Dog {
+  get face => '🐶';
+}
+
+class Cat {
+  get face => '🐱';
+}
+
+sameFace(animal, face) {
+  animal.face == face;
+}
+
+sameFace(Dog(), ...);  // Called twice
+sameFace(Dog(), ...);
+sameFace(Cat(), ...);  // Called once
+```
+
+**Inline Cache Structure:**
+
+```
+                         ICData
+                         ┌─────────────────────────────────┐
+sameFace(animal, ...)───▶│// class, method, frequency      │
+         │               │[Dog, Dog.get:face, 2,           │
+         └───────────────│ Cat, Cat.get:face, 1]           │
+                         └─────────────────────────────────┘
+                         InlineCacheStub
+                         ┌─────────────────────────────────┐
+                        ▶│ idx = cache.indexOf(classOf(this));
+                         │ if (idx != -1) {                │
+                         │   cache[idx + 2]++;  // freq++  │
+                         │   return cache[idx + 1](...);   │
+                         │ }                               │
+                         │ return InlineCacheMiss(...);    │
+                         └─────────────────────────────────┘
+```
+
+The cache stores:
+- Receiver class IDs
+- Target methods
+- Invocation frequency counters (for optimization decisions)
+
+### Adaptive Optimizing Compilation
+
+As code runs, the VM collects execution profiles:
+
+- **Type feedback** from inline caches
+- **Execution counters** for functions and basic blocks
+
+When a function becomes "hot" (exceeds execution threshold), it's submitted to the **background optimizing compiler**.
+
+```
+                                                   in hot code ICs
+ Kernel AST            Unoptimized IL             have collected type
+╭──────────────╮      ╭───────────────────────╮   ╱ feedback
+│ FunctionNode │      │ LoadLocal('a')        │   ICData
+│              │      │ LoadLocal('b')      ┌────▶┌─────────────────────┐
+│ (a, b) =>    │ ┣━━▶ │ InstanceCall:1('+', ┴)│   │[(Smi, Smi.+, 10000)]│
+│   a + b;     │      │ Return      ╱         │   └─────────────────────┘
+╰──────────────╯      ╰────────────╱──────────╯
+                              deopt id  ┳
+                                        ┃
+                               SSA IL   ▼
+                              ╭────────────────────────────────╮
+                              │ v1<-Parameter('a')             │
+                              │ v2<-Parameter('b')             │
+                              │ v3<-InstanceCall:1('+', v1, v2)│
+                              │ Return(v3)                     │
+                              ╰────────────────────────────────╯
+                                        ┳
+                                        ▼
+   Machine Code                 Optimized SSA IL
+  ╭─────────────────────╮     ╭──────────────────────────────╮
+  │ movq rax, [rbp+...] │     │ v1<-Parameter('a')           │
+  │ testq rax, 1        │ ◀━━┫│ v2<-Parameter('b')           │
+  │ jnz ->deopt@1       │     │ CheckSmi:1(v1)               │
+  │ movq rbx, [rbp+...] │     │ CheckSmi:1(v2)               │
+  │ testq rbx, 1        │     │ v3<-BinarySmiOp:1(+, v1, v2) │
+  │ jnz ->deopt@1       │     │ Return(v3)                   │
+  │ addq rax, rbx       │     ╰──────────────────────────────╯
+  │ jo ->deopt@1        │
+  │ retq                │
+  ╰─────────────────────╯
+```
+
+**Optimization Pipeline:**
+
+1. Build unoptimized IL from Kernel AST
+2. Convert to SSA (Static Single Assignment) form
+3. Apply optimizations:
+   - Speculative specialization based on type feedback
+   - Inlining
+   - Range analysis
+   - Type propagation
+   - Representation selection
+   - Global value numbering
+   - Allocation sinking
+4. Lower to machine code with linear scan register allocation
+
+### Deoptimization
+
+Optimized code makes speculative assumptions that may be violated:
+
+```dart
+void printAnimal(obj) {
+  print('Animal {');
+  print('  ${obj.toString()}');
+  print('}');
+}
+
+// Called 50,000 times with Cat - optimized for Cat
+for (var i = 0; i < 50000; i++)
+  printAnimal(Cat());
+
+// Called with Dog - triggers deoptimization
+printAnimal(Dog());
+```
+
+When assumptions are violated, the VM **deoptimizes**:
+
+- Transfers execution to the matching point in unoptimized code
+- Unoptimized code handles all cases correctly
+- Function is eventually reoptimized with updated type feedback
+
+**Two Types of Guards:**
+
+1. **Inline checks** (eager deoptimization) - `CheckSmi`, `CheckClass` instructions before operations
+2. **Global guards** (lazy deoptimization) - Runtime discards optimized code when global assumptions change
+
+<Note>
+Deoptimization points use **deopt IDs** to match optimized positions to unoptimized code locations, ensuring correct resumption after side effects.
+</Note>
+
+### On-Stack Replacement (OSR)
+
+For long-running loops, the VM can switch from unoptimized to optimized code **while the function is executing**:
+
+- Stack frame for unoptimized version is transparently replaced
+- Execution continues in optimized code
+- Critical for hot loops in long-running applications
+
+## Ahead-of-Time (AOT) Compilation
+
+AOT compilation produces machine code before execution, enabling:
+
+- **Platforms without JIT** (iOS, embedded systems)
+- **Fast startup** with consistent performance
+- **Reduced runtime footprint** (no compiler in deployed app)
+
+<Info>
+JIT achieves better peak performance with warmup time, while AOT provides immediate peak performance with no warmup.
+</Info>
+
+### AOT Requirements
+
+Since AOT can't compile at runtime:
+
+1. **Complete code coverage** - Every reachable function must be pre-compiled
+2. **No speculation** - Can't rely on assumptions that might be violated
+
+### Type Flow Analysis (TFA)
+
+AOT uses global static analysis to:
+
+- Determine which code is reachable from entry points
+- Track which classes are instantiated
+- Analyze how types flow through the program
+- Devirtualize calls based on proven type information
+
+```
+╭─────────────╮                      ╭────────────╮
+│╭─────────────╮       ╔═════╗       │ Kernel AST │
+││╭─────────────╮┣━━━▶ ║ CFE ║ ┣━━━▶ │            │
+┆││ Dart Source │      ╚═════╝       │ whole      │
+┆┆│             │                    │ program    │
+ ┆┆             ┆                    ╰────────────╯
+  ┆             ┆                          ┳
+                                           ┃
+                                           ▼
+                                        ╔═════╗ type-flow analysis
+                                        ║ TFA ║ propagates types
+                                        ╚═════╝ through program
+                                           ┳
+                                           ▼
+    ╭────────────╮                   ╭────────────╮
+    │AOT Snapshot│      ╔════╗       │ Kernel AST │
+    │            │◀━━━┫ ║ VM ║ ◀━━━┫ │ inferred   │
+    │            │      ╚════╝       │ treeshaken │
+    ╰────────────╯                   ╰────────────╯
+```
+
+<Note>
+TFA is conservative - it errs on the side of correctness, unlike JIT which can speculate and deoptimize.
+</Note>
+
+### Precompiled Runtime
+
+AOT snapshots run on a stripped-down VM:
+
+- No JIT compiler components
+- No dynamic code loading
+- Smaller binary size
+- Reduced memory footprint
+
+## AppJIT Snapshots
+
+**AppJIT** combines JIT compilation with snapshot serialization:
+
+1. **Training run** - Execute app with mock data, collect JIT-compiled code
+2. **Snapshot** - Serialize compiled code and VM state
+3. **Deployment** - Distribute snapshot instead of source
+4. **Runtime** - Fast startup from pre-compiled code, can still JIT if needed
+
+```console
+# Create AppJIT snapshot
+$ dart --snapshot-kind=app-jit --snapshot=dart2js.snapshot \
+  pkg/compiler/lib/src/dart2js.dart -o hello.js hello.dart
+
+# Run from snapshot
+$ dart dart2js.snapshot -o hello.js hello.dart
+```
+
+**Use Case:** Large tools like `dartanalyzer` and `dart2js` that spend significant time in JIT warmup.
+
+## Compilation Mode Comparison
+
+| Mode | Compile Time | Startup | Peak Performance | Warmup | Use Case |
+|------|--------------|---------|------------------|--------|----------|
+| **JIT** | During execution | Fast | Best | Yes | Development, hot-reload |
+| **AOT** | Before execution | Fastest | Good | None | Production, mobile apps |
+| **AppJIT** | Training run | Very fast | Good | Minimal | CLI tools, servers |
+
+## Debugging Compilation
+
+### JIT Flags
+
+```console
+# Print optimized IL and disassembly
+$ dart --print-flow-graph-optimized \
+       --disassemble-optimized \
+       --print-flow-graph-filter=myFunction \
+       --no-background-compilation \
+       test.dart
+```
+
+| Flag | Description |
+|------|-------------|
+| `--print-flow-graph[-optimized]` | Print IL for all/optimized compilations |
+| `--disassemble[-optimized]` | Disassemble all/optimized functions |
+| `--print-flow-graph-filter=xyz` | Filter output to specific functions |
+| `--compiler-passes=...` | Control compiler passes |
+| `--no-background-compilation` | Compile on main thread |
+| `--trace-deoptimization` | Show deoptimization events |
+
+### AOT Flags
+
+```console
+# AOT with IL/disassembly output
+$ dart compile exe --verbose \
+  --extra-gen-snapshot-options=--print-flow-graph-optimized \
+  --extra-gen-snapshot-options=--disassemble \
+  hello.dart
+```
+
+## Summary
+
+Dart's flexible compilation system provides:
+
+- **JIT** for fast development with adaptive optimization
+- **AOT** for production deployment with guaranteed performance
+- **AppJIT** for tools needing fast startup with JIT capabilities
+- **Sophisticated optimization** based on type feedback and static analysis
+- **Deoptimization safety** allowing speculative optimizations
+
+Understanding these compilation modes helps you choose the right deployment strategy and optimize for your specific use case.

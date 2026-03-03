@@ -1,0 +1,635 @@
+---
+title: dart:html
+description: HTML elements and resources for web-based applications
+---
+
+The `dart:html` library provides HTML elements and other resources for web-based applications. This library enables DOM manipulation, event handling, and browser API access.
+
+<Warning>
+**Platform Availability:** dart:html is **only available on web platforms**. It cannot be used in Flutter or command-line applications. For server-side or mobile apps, use dart:io instead.
+</Warning>
+
+## Overview
+
+To use this library in your code:
+
+```dart
+import 'dart:html';
+```
+
+The dart:html library includes:
+- DOM manipulation (elements, nodes, attributes)
+- Event handling
+- Browser APIs (Storage, Canvas, WebSocket, etc.)
+- HTTP requests (HttpRequest)
+- CSS and styling
+
+## DOM Manipulation
+
+### Selecting Elements
+
+<ParamField path="querySelector(String selectors)" type="function">
+  Returns the first element that matches the CSS selector.
+</ParamField>
+
+<ParamField path="querySelectorAll(String selectors)" type="function">
+  Returns all elements that match the CSS selector.
+</ParamField>
+
+```dart
+import 'dart:html';
+
+// Select by ID
+var button = querySelector('#myButton');
+
+// Select by class
+var items = querySelectorAll('.item');
+
+// Select by tag
+var paragraphs = querySelectorAll('p');
+
+// Complex selectors
+var navLinks = querySelectorAll('nav ul li a');
+var activeItems = querySelectorAll('.item.active');
+
+// Get element by ID (alternative)
+var element = document.getElementById('myId');
+
+// Type-safe selection
+ButtonElement? button = querySelector('#myButton') as ButtonElement?;
+if (button != null) {
+  button.click();
+}
+```
+
+### Creating Elements
+
+```dart
+// Create element
+var div = DivElement();
+var paragraph = ParagraphElement();
+var button = ButtonElement();
+var input = InputElement();
+
+// Set properties
+button.text = 'Click Me';
+button.id = 'submitButton';
+button.classes.add('btn-primary');
+
+input.type = 'text';
+input.placeholder = 'Enter name';
+input.value = 'Default value';
+
+// Set attributes
+div.setAttribute('data-id', '123');
+var dataId = div.getAttribute('data-id');
+
+// Create with HTML
+var container = DivElement()
+  ..innerHTML = '<p>Hello, <strong>World</strong>!</p>';
+```
+
+### Modifying DOM
+
+<Accordion title="DOM Modification Methods">
+
+```dart
+// Append child
+var parent = querySelector('#parent')!;
+var child = DivElement()..text = 'Child element';
+parent.append(child);
+
+// Insert before
+var sibling = querySelector('#sibling')!;
+parent.insertBefore(child, sibling);
+
+// Remove element
+child.remove();
+
+// Replace element
+var newElement = SpanElement()..text = 'Replacement';
+child.replaceWith(newElement);
+
+// Clear all children
+parent.children.clear();
+
+// Clone element
+var clone = child.clone(true);  // true = deep clone
+
+// Move element
+var newParent = querySelector('#newParent')!;
+newParent.append(child);  // Moves from old parent
+```
+
+</Accordion>
+
+### Element Properties
+
+```dart
+var element = querySelector('#myElement')!;
+
+// Text content
+element.text = 'Plain text';
+var text = element.text;
+
+// HTML content
+element.innerHtml = '<strong>Bold</strong> text';
+var html = element.innerHtml;
+
+// Classes
+element.classes.add('active');
+element.classes.remove('hidden');
+element.classes.toggle('selected');
+if (element.classes.contains('active')) {
+  print('Element is active');
+}
+
+// Styles
+element.style.color = 'red';
+element.style.fontSize = '16px';
+element.style.display = 'none';
+
+// Data attributes
+element.dataset['userId'] = '123';
+var userId = element.dataset['userId'];
+
+// Dimensions and position
+var width = element.clientWidth;
+var height = element.clientHeight;
+var rect = element.getBoundingClientRect();
+print('Top: ${rect.top}, Left: ${rect.left}');
+```
+
+## Event Handling
+
+### Click Events
+
+```dart
+// Add click listener
+var button = querySelector('#myButton')!;
+button.onClick.listen((event) {
+  print('Button clicked!');
+  event.preventDefault();  // Prevent default action
+});
+
+// One-time event
+button.onClick.first.then((event) {
+  print('First click');
+});
+
+// Remove listener (store subscription)
+var subscription = button.onClick.listen((event) {
+  print('Click');
+});
+subscription.cancel();  // Remove listener
+```
+
+### Common Events
+
+<Accordion title="Event Types">
+
+```dart
+var input = querySelector('#myInput') as InputElement;
+var form = querySelector('#myForm') as FormElement;
+
+// Input events
+input.onInput.listen((event) {
+  print('Input value: ${input.value}');
+});
+
+input.onChange.listen((event) {
+  print('Input changed');
+});
+
+input.onFocus.listen((event) {
+  print('Input focused');
+});
+
+input.onBlur.listen((event) {
+  print('Input blurred');
+});
+
+// Keyboard events
+input.onKeyPress.listen((event) {
+  print('Key pressed: ${event.charCode}');
+});
+
+input.onKeyDown.listen((event) {
+  if (event.keyCode == KeyCode.ENTER) {
+    print('Enter pressed');
+  }
+});
+
+// Mouse events
+var element = querySelector('#myElement')!;
+element.onMouseEnter.listen((event) => print('Mouse entered'));
+element.onMouseLeave.listen((event) => print('Mouse left'));
+element.onMouseMove.listen((event) {
+  print('Mouse at: ${event.client.x}, ${event.client.y}');
+});
+
+// Form events
+form.onSubmit.listen((event) {
+  event.preventDefault();
+  print('Form submitted');
+});
+
+form.onReset.listen((event) {
+  print('Form reset');
+});
+
+// Window events
+window.onResize.listen((event) {
+  print('Window resized: ${window.innerWidth}x${window.innerHeight}');
+});
+
+window.onLoad.listen((event) {
+  print('Page loaded');
+});
+```
+
+</Accordion>
+
+### Event Delegation
+
+```dart
+// Handle events on parent for dynamically added children
+var list = querySelector('#itemList')!;
+list.onClick.listen((event) {
+  var target = event.target as Element;
+  if (target.classes.contains('item')) {
+    print('Item clicked: ${target.text}');
+  }
+});
+```
+
+## Forms and Input
+
+### Form Handling
+
+```dart
+var form = querySelector('#myForm') as FormElement;
+var nameInput = querySelector('#name') as InputElement;
+var emailInput = querySelector('#email') as InputElement;
+var submitButton = querySelector('#submit') as ButtonElement;
+
+// Handle form submission
+form.onSubmit.listen((event) {
+  event.preventDefault();
+  
+  // Get form data
+  var name = nameInput.value;
+  var email = emailInput.value;
+  
+  // Validate
+  if (name.isEmpty || email.isEmpty) {
+    window.alert('Please fill all fields');
+    return;
+  }
+  
+  // Submit data
+  submitForm(name, email);
+});
+
+// Reset form
+form.reset();
+
+// Enable/disable form elements
+submitButton.disabled = true;
+nameInput.disabled = false;
+```
+
+### Input Types
+
+```dart
+// Text input
+var textInput = InputElement()
+  ..type = 'text'
+  ..placeholder = 'Enter text';
+
+// Number input
+var numberInput = InputElement()
+  ..type = 'number'
+  ..min = '0'
+  ..max = '100'
+  ..step = '1';
+
+// Checkbox
+var checkbox = InputElement()
+  ..type = 'checkbox'
+  ..checked = true;
+
+if (checkbox.checked!) {
+  print('Checkbox is checked');
+}
+
+// Radio buttons
+var radio1 = InputElement()
+  ..type = 'radio'
+  ..name = 'choice'
+  ..value = 'option1';
+
+// Select dropdown
+var select = SelectElement();
+select.append(OptionElement()
+  ..value = '1'
+  ..text = 'Option 1');
+select.append(OptionElement()
+  ..value = '2'
+  ..text = 'Option 2');
+
+var selectedValue = select.value;
+```
+
+## HTTP Requests
+
+### HttpRequest (Ajax)
+
+<ParamField path="HttpRequest" type="class">
+  Makes HTTP requests to servers. Similar to XMLHttpRequest in JavaScript.
+</ParamField>
+
+```dart
+import 'dart:html';
+import 'dart:convert';
+
+// GET request
+Future<Map<String, dynamic>> fetchData() async {
+  try {
+    var response = await HttpRequest.getString('https://api.example.com/data');
+    return jsonDecode(response);
+  } catch (e) {
+    print('Error: $e');
+    rethrow;
+  }
+}
+
+// POST request
+Future<void> postData(Map<String, dynamic> data) async {
+  var request = HttpRequest();
+  request.open('POST', 'https://api.example.com/submit');
+  request.setRequestHeader('Content-Type', 'application/json');
+  
+  request.onLoad.listen((event) {
+    if (request.status == 200) {
+      print('Success: ${request.responseText}');
+    } else {
+      print('Error: ${request.status}');
+    }
+  });
+  
+  request.send(jsonEncode(data));
+}
+
+// With progress tracking
+Future<void> uploadFile(File file) async {
+  var request = HttpRequest();
+  request.open('POST', 'https://api.example.com/upload');
+  
+  request.upload.onProgress.listen((event) {
+    var percent = (event.loaded / event.total!) * 100;
+    print('Upload progress: ${percent.toStringAsFixed(1)}%');
+  });
+  
+  request.send(file);
+}
+```
+
+## Local Storage
+
+<ParamField path="window.localStorage" type="Storage">
+  Persistent key-value storage that survives browser restarts.
+</ParamField>
+
+<ParamField path="window.sessionStorage" type="Storage">
+  Session-only key-value storage that clears when the tab closes.
+</ParamField>
+
+```dart
+import 'dart:html';
+
+// Local storage (persists)
+window.localStorage['username'] = 'john_doe';
+var username = window.localStorage['username'];
+window.localStorage.remove('username');
+window.localStorage.clear();
+
+// Session storage (tab-specific)
+window.sessionStorage['tempData'] = 'value';
+
+// Store JSON data
+var data = {'name': 'John', 'age': 30};
+window.localStorage['userData'] = jsonEncode(data);
+
+var stored = window.localStorage['userData'];
+if (stored != null) {
+  var userData = jsonDecode(stored);
+  print(userData['name']);
+}
+
+// Check if key exists
+if (window.localStorage.containsKey('username')) {
+  print('Username exists');
+}
+
+// Get all keys
+for (var key in window.localStorage.keys) {
+  print('$key: ${window.localStorage[key]}');
+}
+```
+
+## Window and Document
+
+### Window Object
+
+```dart
+// Window properties
+print('Width: ${window.innerWidth}');
+print('Height: ${window.innerHeight}');
+print('URL: ${window.location.href}');
+
+// Navigation
+window.location.href = 'https://example.com';
+window.location.reload();
+window.history.back();
+window.history.forward();
+
+// Dialogs
+window.alert('Hello!');
+var confirmed = window.confirm('Are you sure?');
+var input = window.prompt('Enter your name:');
+
+// Timers
+var timerId = window.setTimeout(() {
+  print('Delayed execution');
+}, 1000);
+
+var intervalId = window.setInterval(() {
+  print('Repeated execution');
+}, 1000);
+
+window.clearTimeout(timerId);
+window.clearInterval(intervalId);
+
+// Console
+window.console.log('Log message');
+window.console.error('Error message');
+window.console.warn('Warning message');
+```
+
+### Document Object
+
+```dart
+// Document properties
+var title = document.title;
+document.title = 'New Title';
+
+var url = document.baseUri;
+var domain = document.domain;
+
+// Document ready
+document.onReadyStateChange.listen((event) {
+  if (document.readyState == 'complete') {
+    print('Document loaded');
+  }
+});
+
+// Create elements
+var element = document.createElement('div');
+var textNode = document.createTextNode('Text content');
+
+// Body
+document.body?.append(element);
+```
+
+## Canvas
+
+<ParamField path="CanvasElement" type="class">
+  HTML5 Canvas for drawing graphics.
+</ParamField>
+
+```dart
+var canvas = querySelector('#myCanvas') as CanvasElement;
+var ctx = canvas.context2D;
+
+// Draw rectangle
+ctx.fillStyle = 'blue';
+ctx.fillRect(10, 10, 100, 50);
+
+// Draw circle
+ctx.beginPath();
+ctx.arc(150, 75, 50, 0, 2 * 3.14159);
+ctx.fillStyle = 'red';
+ctx.fill();
+
+// Draw line
+ctx.beginPath();
+ctx.moveTo(0, 0);
+ctx.lineTo(200, 100);
+ctx.strokeStyle = 'green';
+ctx.lineWidth = 2;
+ctx.stroke();
+
+// Draw text
+ctx.font = '20px Arial';
+ctx.fillStyle = 'black';
+ctx.fillText('Hello Canvas', 10, 100);
+
+// Clear canvas
+ctx.clearRect(0, 0, canvas.width!, canvas.height!);
+```
+
+## WebSocket
+
+<ParamField path="WebSocket" type="class">
+  Enables real-time bidirectional communication with a server.
+</ParamField>
+
+```dart
+var ws = WebSocket('wss://echo.websocket.org');
+
+// Connection opened
+ws.onOpen.listen((event) {
+  print('Connected');
+  ws.send('Hello Server!');
+});
+
+// Receive messages
+ws.onMessage.listen((MessageEvent event) {
+  print('Received: ${event.data}');
+});
+
+// Connection closed
+ws.onClose.listen((event) {
+  print('Disconnected');
+});
+
+// Error handling
+ws.onError.listen((event) {
+  print('Error occurred');
+});
+
+// Close connection
+ws.close();
+```
+
+## Best Practices
+
+<Warning>
+1. **Always null-check** querySelector results before using them
+2. **Use event delegation** for dynamically created elements
+3. **Cancel subscriptions** when elements are removed to prevent memory leaks
+4. **Sanitize user input** before inserting into DOM to prevent XSS
+5. **Use typed elements** (ButtonElement, InputElement) for type safety
+</Warning>
+
+<Tip>
+**For complex web apps**, consider using a web framework like AngularDart or over_react instead of manipulating the DOM directly with dart:html.
+</Tip>
+
+## Common Patterns
+
+```dart
+// Safe element access
+void updateElement() {
+  var element = querySelector('#myElement');
+  if (element != null) {
+    element.text = 'Updated';
+  }
+}
+
+// Event delegation for dynamic content
+void setupList() {
+  var list = querySelector('#list')!;
+  
+  // Handle clicks on current and future items
+  list.onClick.listen((event) {
+    var target = event.target as Element;
+    if (target.classes.contains('item')) {
+      handleItemClick(target);
+    }
+  });
+}
+
+// Loading state management
+Future<void> loadData() async {
+  var button = querySelector('#loadButton') as ButtonElement;
+  var spinner = querySelector('#spinner')!;
+  
+  button.disabled = true;
+  spinner.classes.remove('hidden');
+  
+  try {
+    await fetchData();
+  } finally {
+    button.disabled = false;
+    spinner.classes.add('hidden');
+  }
+}
+```
+
+## Related Resources
+
+- [Web Programming with Dart](https://dart.dev/web) - Official web guide
+- [AngularDart](https://angulardart.xyz/) - Web framework for Dart
+- [MDN Web Docs](https://developer.mozilla.org/) - HTML/CSS/JavaScript reference

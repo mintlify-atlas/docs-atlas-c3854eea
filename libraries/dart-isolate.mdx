@@ -1,0 +1,559 @@
+---
+title: dart:isolate
+description: Concurrent programming using isolates for parallel execution
+---
+
+The `dart:isolate` library enables concurrent programming using isolates: independent workers that are similar to threads but don't share memory, communicating only via messages.
+
+<Warning>
+**Platform Availability:** dart:isolate is currently only supported by the Dart Native platform (VM, AOT, and Flutter). It is **not available on the web**.
+</Warning>
+
+## Overview
+
+To use this library in your code:
+
+```dart
+import 'dart:isolate';
+```
+
+Key concepts:
+- **Isolates** - Independent execution contexts with their own memory
+- **Ports** - Communication channels between isolates
+- **Message passing** - How isolates share data
+- **Concurrency** - Run CPU-intensive tasks in parallel
+
+## What are Isolates?
+
+Isolates are Dart's model for concurrency:
+
+- Each isolate has its own memory heap
+- Isolates cannot share memory or access each other's state
+- Communication happens only through message passing
+- All Dart code runs in an isolate (at least the main isolate)
+- Unlike threads, isolates don't have race conditions or locks
+
+## Creating Isolates
+
+### Basic Isolate Spawning
+
+<ParamField path="Isolate.spawn" type="static method">
+  Spawns a new isolate that runs a specified function.
+</ParamField>
+
+```dart
+import 'dart:isolate';
+
+// Entry point function for the isolate
+void isolateFunction(SendPort sendPort) {
+  // Do some work
+  var result = expensiveComputation();
+  
+  // Send result back to main isolate
+  sendPort.send(result);
+}
+
+Future<void> main() async {
+  // Create a receive port for getting messages
+  var receivePort = ReceivePort();
+  
+  // Spawn the isolate
+  await Isolate.spawn(isolateFunction, receivePort.sendPort);
+  
+  // Wait for the result
+  var result = await receivePort.first;
+  print('Result: $result');
+}
+
+int expensiveComputation() {
+  // Simulate heavy computation
+  var sum = 0;
+  for (var i = 0; i < 1000000000; i++) {
+    sum += i;
+  }
+  return sum;
+}
+```
+
+### Two-Way Communication
+
+<Accordion title="Bidirectional Message Passing">
+
+```dart
+import 'dart:isolate';
+
+// Worker isolate that processes messages
+void workerIsolate(SendPort mainSendPort) {
+  // Create receive port for this isolate
+  var workerReceivePort = ReceivePort();
+  
+  // Send our send port to main isolate
+  mainSendPort.send(workerReceivePort.sendPort);
+  
+  // Listen for messages from main
+  workerReceivePort.listen((message) {
+    if (message is Map) {
+      var command = message['command'];
+      var data = message['data'];
+      var replyPort = message['replyPort'] as SendPort;
+      
+      // Process the command
+      var result = processCommand(command, data);
+      
+      // Send result back
+      replyPort.send(result);
+    }
+  });
+}
+
+Future<dynamic> sendToWorker(
+  SendPort workerSendPort,
+  String command,
+  dynamic data,
+) async {
+  var responsePort = ReceivePort();
+  
+  // Send message with reply port
+  workerSendPort.send({
+    'command': command,
+    'data': data,
+    'replyPort': responsePort.sendPort,
+  });
+  
+  // Wait for response
+  return await responsePort.first;
+}
+
+Future<void> main() async {
+  var mainReceivePort = ReceivePort();
+  
+  // Spawn worker
+  await Isolate.spawn(workerIsolate, mainReceivePort.sendPort);
+  
+  // Get worker's send port
+  var workerSendPort = await mainReceivePort.first as SendPort;
+  
+  // Send commands to worker
+  var result1 = await sendToWorker(workerSendPort, 'process', [1, 2, 3]);
+  print('Result 1: $result1');
+  
+  var result2 = await sendToWorker(workerSendPort, 'compute', {'x': 10, 'y': 20});
+  print('Result 2: $result2');
+}
+
+dynamic processCommand(String command, dynamic data) {
+  switch (command) {
+    case 'process':
+      return (data as List).fold(0, (a, b) => a + b);
+    case 'compute':
+      var map = data as Map;
+      return map['x'] + map['y'];
+    default:
+      return 'Unknown command';
+  }
+}
+```
+
+</Accordion>
+
+## Ports and Communication
+
+### SendPort and ReceivePort
+
+<ParamField path="ReceivePort" type="class">
+  Receives messages from other isolates. Implements Stream.
+</ParamField>
+
+<ParamField path="SendPort" type="class">
+  Sends messages to a ReceivePort. Can be sent between isolates.
+</ParamField>
+
+```dart
+// Create receive port
+var receivePort = ReceivePort();
+
+// Get the send port
+var sendPort = receivePort.sendPort;
+
+// Listen for messages
+receivePort.listen((message) {
+  print('Received: $message');
+});
+
+// Send a message (from another isolate)
+sendPort.send('Hello');
+sendPort.send(123);
+sendPort.send({'key': 'value'});
+sendPort.send([1, 2, 3]);
+
+// Close port when done
+receivePort.close();
+```
+
+### Message Types
+
+Only certain types can be sent between isolates:
+
+<Accordion title="Sendable Types">
+
+**Primitives:**
+- `null`
+- `bool`
+- `int`
+- `double`
+- `String`
+
+**Collections:**
+- `List` (of sendable types)
+- `Map` (with sendable keys and values)
+- `Set` (of sendable types)
+
+**Special types:**
+- `SendPort`
+- `Capability`
+- `TransferableTypedData`
+
+**NOT sendable:**
+- Functions
+- Closures
+- Objects with non-sendable fields
+- Sockets, Files, etc.
+
+```dart
+// Valid messages
+sendPort.send(42);
+sendPort.send('text');
+sendPort.send([1, 2, 3]);
+sendPort.send({'name': 'John', 'age': 30});
+
+// Invalid - would throw error
+// sendPort.send(() => print('hello'));  // Function
+// sendPort.send(File('test.txt'));      // File object
+```
+
+</Accordion>
+
+## Compute Function (Flutter)
+
+<ParamField path="compute<Q, R>" type="function">
+  Flutter helper function that spawns an isolate, runs a computation, and returns the result.
+</ParamField>
+
+```dart
+import 'package:flutter/foundation.dart';
+
+// Top-level or static function
+int fibonacci(int n) {
+  if (n < 2) return n;
+  return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+Future<void> main() async {
+  // Run computation in separate isolate
+  var result = await compute(fibonacci, 40);
+  print('Fibonacci(40) = $result');
+}
+
+// With custom data
+class ComputeData {
+  final int start;
+  final int end;
+  ComputeData(this.start, this.end);
+}
+
+int sumRange(ComputeData data) {
+  var sum = 0;
+  for (var i = data.start; i <= data.end; i++) {
+    sum += i;
+  }
+  return sum;
+}
+
+Future<void> example() async {
+  var result = await compute(sumRange, ComputeData(1, 1000000));
+  print('Sum: $result');
+}
+```
+
+## Isolate Pool Pattern
+
+```dart
+import 'dart:isolate';
+import 'dart:async';
+
+class IsolatePool {
+  final int size;
+  final List<SendPort> _workers = [];
+  int _currentWorker = 0;
+  
+  IsolatePool(this.size);
+  
+  Future<void> start() async {
+    for (var i = 0; i < size; i++) {
+      var receivePort = ReceivePort();
+      await Isolate.spawn(_workerIsolate, receivePort.sendPort);
+      var workerSendPort = await receivePort.first as SendPort;
+      _workers.add(workerSendPort);
+    }
+  }
+  
+  Future<T> execute<T>(dynamic Function(dynamic) task, dynamic argument) async {
+    var responsePort = ReceivePort();
+    var worker = _workers[_currentWorker];
+    _currentWorker = (_currentWorker + 1) % size;
+    
+    worker.send({
+      'task': task,
+      'argument': argument,
+      'responsePort': responsePort.sendPort,
+    });
+    
+    return await responsePort.first as T;
+  }
+  
+  static void _workerIsolate(SendPort mainSendPort) {
+    var workerReceivePort = ReceivePort();
+    mainSendPort.send(workerReceivePort.sendPort);
+    
+    workerReceivePort.listen((message) {
+      var task = message['task'] as Function;
+      var argument = message['argument'];
+      var responsePort = message['responsePort'] as SendPort;
+      
+      var result = task(argument);
+      responsePort.send(result);
+    });
+  }
+}
+
+// Usage
+Future<void> main() async {
+  var pool = IsolatePool(4);
+  await pool.start();
+  
+  var futures = <Future>[];
+  for (var i = 0; i < 10; i++) {
+    futures.add(pool.execute((n) => fibonacci(n), 30 + i));
+  }
+  
+  var results = await Future.wait(futures);
+  print('Results: $results');
+}
+
+int fibonacci(int n) {
+  if (n < 2) return n;
+  return fibonacci(n - 1) + fibonacci(n - 2);
+}
+```
+
+## Isolate Control
+
+### Pausing and Resuming
+
+<Accordion title="Isolate Lifecycle Management">
+
+```dart
+import 'dart:isolate';
+
+void longRunningTask(SendPort sendPort) {
+  var count = 0;
+  while (true) {
+    count++;
+    if (count % 1000000 == 0) {
+      sendPort.send('Count: $count');
+    }
+  }
+}
+
+Future<void> main() async {
+  var receivePort = ReceivePort();
+  
+  // Spawn isolate and get reference
+  var isolate = await Isolate.spawn(
+    longRunningTask,
+    receivePort.sendPort,
+    paused: true,  // Start paused
+  );
+  
+  // Listen to messages
+  receivePort.listen((message) {
+    print(message);
+  });
+  
+  // Resume execution
+  isolate.resume(isolate.pauseCapability!);
+  
+  // Wait a bit
+  await Future.delayed(Duration(seconds: 2));
+  
+  // Pause the isolate
+  var pauseCapability = isolate.pause();
+  print('Isolate paused');
+  
+  await Future.delayed(Duration(seconds: 1));
+  
+  // Resume again
+  isolate.resume(pauseCapability);
+  print('Isolate resumed');
+  
+  await Future.delayed(Duration(seconds: 2));
+  
+  // Kill the isolate
+  isolate.kill(priority: Isolate.immediate);
+  print('Isolate killed');
+}
+```
+
+</Accordion>
+
+### Error Handling
+
+```dart
+import 'dart:isolate';
+
+void errorProneIsolate(SendPort sendPort) {
+  // This will throw an error
+  throw Exception('Something went wrong!');
+}
+
+Future<void> main() async {
+  var receivePort = ReceivePort();
+  var errorPort = ReceivePort();
+  
+  await Isolate.spawn(
+    errorProneIsolate,
+    receivePort.sendPort,
+    onError: errorPort.sendPort,
+  );
+  
+  // Listen for errors
+  errorPort.listen((errorData) {
+    print('Error in isolate: $errorData');
+  });
+  
+  // Listen for messages
+  receivePort.listen((message) {
+    print('Message: $message');
+  });
+}
+```
+
+## Use Cases for Isolates
+
+<CardGroup cols={2}>
+  <Card title="JSON Parsing" icon="code">
+    Parse large JSON responses without blocking the UI
+  </Card>
+  
+  <Card title="Image Processing" icon="image">
+    Resize, compress, or filter images in the background
+  </Card>
+  
+  <Card title="Encryption" icon="lock">
+    Perform cryptographic operations without freezing the app
+  </Card>
+  
+  <Card title="Database Operations" icon="database">
+    Run complex queries or migrations in parallel
+  </Card>
+</CardGroup>
+
+## Practical Examples
+
+### JSON Parsing in Isolate
+
+```dart
+import 'dart:isolate';
+import 'dart:convert';
+
+// Parse JSON in isolate
+Map<String, dynamic> parseJson(String jsonString) {
+  return jsonDecode(jsonString);
+}
+
+Future<Map<String, dynamic>> parseJsonInIsolate(String json) async {
+  return await Isolate.run(() => parseJson(json));
+}
+
+// Usage
+Future<void> main() async {
+  var largeJson = '{"users": [/* lots of data */]}';
+  var parsed = await parseJsonInIsolate(largeJson);
+  print('Parsed ${parsed['users'].length} users');
+}
+```
+
+### Image Processing
+
+```dart
+import 'dart:isolate';
+import 'dart:typed_data';
+
+class ImageData {
+  final Uint8List pixels;
+  final int width;
+  final int height;
+  
+  ImageData(this.pixels, this.width, this.height);
+}
+
+ImageData applyFilter(ImageData image) {
+  var filtered = Uint8List(image.pixels.length);
+  
+  // Apply some filter (e.g., grayscale)
+  for (var i = 0; i < image.pixels.length; i += 4) {
+    var gray = ((image.pixels[i] + 
+                 image.pixels[i + 1] + 
+                 image.pixels[i + 2]) / 3).round();
+    filtered[i] = gray;      // R
+    filtered[i + 1] = gray;  // G
+    filtered[i + 2] = gray;  // B
+    filtered[i + 3] = image.pixels[i + 3];  // A
+  }
+  
+  return ImageData(filtered, image.width, image.height);
+}
+
+Future<ImageData> processImageInIsolate(ImageData image) async {
+  return await Isolate.run(() => applyFilter(image));
+}
+```
+
+## Best Practices
+
+<Warning>
+1. **Use isolates sparingly** - They have overhead; only use for CPU-intensive tasks
+2. **Keep messages simple** - Only send primitive types and collections
+3. **Close ports** when done to prevent memory leaks
+4. **Handle errors** in isolates to prevent silent failures
+5. **Consider compute()** for simple one-off computations (Flutter)
+</Warning>
+
+<Tip>
+**Isolates are NOT for I/O operations.** Use async/await for network requests, file I/O, and database queries. Isolates are for **CPU-bound** tasks only.
+</Tip>
+
+## When NOT to Use Isolates
+
+- Network requests (use async/await instead)
+- File I/O operations
+- Database queries
+- Simple computations that take < 100ms
+- Tasks that require shared state
+
+## Isolate vs Thread
+
+| Feature | Isolate | Thread |
+|---------|---------|--------|
+| Memory | Separate heap | Shared memory |
+| Communication | Message passing | Shared state |
+| Race conditions | No | Yes |
+| Locks needed | No | Yes |
+| Creation cost | Higher | Lower |
+| Safety | High | Low |
+
+## Related Resources
+
+- [Concurrency in Dart](https://dart.dev/guides/language/concurrency) - Official guide
+- [Isolate API Reference](https://api.dart.dev/stable/dart-isolate/dart-isolate-library.html) - Full API docs
+- [Flutter Compute Function](https://api.flutter.dev/flutter/foundation/compute.html) - Flutter helper

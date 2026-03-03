@@ -1,0 +1,520 @@
+---
+title: 'Dart Formatter'
+description: 'Idiomatic code formatting tool for Dart'
+icon: 'paintbrush'
+---
+
+The Dart formatter (`dart format`) automatically formats Dart code according to the official Dart style guide, ensuring consistent code style across your project.
+
+## Overview
+
+The formatter applies a consistent, opinionated style to Dart code:
+- Standard indentation (2 spaces)
+- Line length limit (80 characters by default)
+- Proper spacing and line breaks
+- Consistent brace placement
+
+## Usage
+
+```bash
+dart format [options] <files or directories>
+```
+
+## Basic Examples
+
+<CodeGroup>
+```bash Format Files
+# Format a single file
+dart format lib/main.dart
+
+# Format multiple files
+dart format lib/main.dart test/main_test.dart
+
+# Format all Dart files in a directory
+dart format lib/
+
+# Format entire project
+dart format .
+```
+
+```bash Dry Run
+# Show what would be formatted without changing files
+dart format --output=none .
+
+# Show formatted output to stdout
+dart format --output=show lib/main.dart
+```
+
+```bash Check Formatting
+# Check if files are formatted (CI/CD)
+dart format --output=none --set-exit-if-changed .
+```
+</CodeGroup>
+
+## Command-Line Options
+
+### Output Options
+
+Control how formatted code is displayed:
+
+```bash
+# Write formatted code to files (default)
+dart format lib/
+
+# Show formatted code on stdout
+dart format --output=show lib/main.dart
+
+# Don't output formatted code
+dart format --output=none .
+
+# Write formatted code to a JSON file
+dart format --output=json --show=changed .
+```
+
+### Line Length
+
+Set the maximum line length:
+
+```bash
+# Use default line length (80 characters)
+dart format lib/
+
+# Set custom line length
+dart format --line-length=120 lib/
+
+# Common lengths:
+dart format --line-length=100 lib/  # Wider screens
+dart format --line-length=80 lib/   # Default
+```
+
+### Indentation
+
+Configure indentation:
+
+```bash
+# Use 2-space indentation (default)
+dart format lib/
+
+# Set custom indentation
+dart format --indent=4 lib/
+```
+
+### File Selection
+
+```bash
+# Follow symlinks when formatting
+dart format --follow-links lib/
+
+# Process stdin
+cat lib/main.dart | dart format
+```
+
+### Exit Codes
+
+Control exit behavior:
+
+```bash
+# Exit with code 1 if any files would change (useful for CI)
+dart format --output=none --set-exit-if-changed .
+```
+
+## Formatting Behavior
+
+### Before and After
+
+<CodeGroup>
+```dart Before Formatting
+class Person{
+String name;int age;
+Person(this.name,this.age);
+void greet(){print("Hello, I'm $name and I'm $age years old.");}
+}
+```
+
+```dart After Formatting
+class Person {
+  String name;
+  int age;
+
+  Person(this.name, this.age);
+
+  void greet() {
+    print("Hello, I'm $name and I'm $age years old.");
+  }
+}
+```
+</CodeGroup>
+
+### Long Lines
+
+The formatter automatically wraps long lines:
+
+<CodeGroup>
+```dart Before
+void myFunction() {
+  var message = "This is a very long string that exceeds the line length limit and should be wrapped.";
+}
+```
+
+```dart After (80 char limit)
+void myFunction() {
+  var message =
+      "This is a very long string that exceeds the line length limit and "
+      "should be wrapped.";
+}
+```
+</CodeGroup>
+
+### Method Chains
+
+<CodeGroup>
+```dart Before
+final result = myList.where((x) => x > 0).map((x) => x * 2).toList();
+```
+
+```dart After (if too long)
+final result = myList
+    .where((x) => x > 0)
+    .map((x) => x * 2)
+    .toList();
+```
+</CodeGroup>
+
+### Collections
+
+<CodeGroup>
+```dart Short Collections
+final numbers = [1, 2, 3, 4, 5];
+final map = {'a': 1, 'b': 2};
+```
+
+```dart Long Collections
+final colors = [
+  'red',
+  'green',
+  'blue',
+  'yellow',
+  'orange',
+  'purple',
+];
+
+final config = {
+  'timeout': 30,
+  'retries': 3,
+  'debug': true,
+};
+```
+</CodeGroup>
+
+## Controlling Formatting
+
+### Disable Formatting
+
+Disable formatting for specific code:
+
+```dart
+// dart format off
+final matrix = [
+  [1,  0,  0],
+  [0,  1,  0],
+  [0,  0,  1],
+];
+// dart format on
+```
+
+### Format Control Comments
+
+```dart
+class MyClass {
+  // This code will be formatted normally
+  void normalMethod() {
+    print('formatted');
+  }
+
+  // dart format off
+  void   specialMethod()   {
+      print(  'not formatted'  );
+  }
+  // dart format on
+}
+```
+
+## CI/CD Integration
+
+### GitHub Actions
+
+```yaml .github/workflows/format.yml
+name: Format Check
+
+on: [push, pull_request]
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dart-lang/setup-dart@v1
+      
+      - name: Check formatting
+        run: dart format --output=none --set-exit-if-changed .
+```
+
+### Pre-commit Hook
+
+```bash .git/hooks/pre-commit
+#!/bin/bash
+
+# Format staged Dart files
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep "\.dart$")
+
+if [ -n "$STAGED_FILES" ]; then
+  echo "Formatting Dart files..."
+  dart format $STAGED_FILES
+  
+  # Add formatted files back to staging
+  git add $STAGED_FILES
+fi
+```
+
+### Makefile Integration
+
+```makefile Makefile
+.PHONY: format format-check
+
+format:
+	@echo "Formatting Dart code..."
+	dart format .
+
+format-check:
+	@echo "Checking Dart code formatting..."
+	dart format --output=none --set-exit-if-changed .
+```
+
+## IDE Integration
+
+### VS Code
+
+Enable format on save:
+
+```json .vscode/settings.json
+{
+  "editor.formatOnSave": true,
+  "[dart]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "Dart-Code.dart-code",
+    "editor.rulers": [80]
+  },
+  "dart.lineLength": 80
+}
+```
+
+### IntelliJ IDEA / Android Studio
+
+1. Go to **Preferences** → **Languages & Frameworks** → **Dart**
+2. Check **Format code on save**
+3. Set **Right margin (columns)** to 80
+
+### Command-line Formatting
+
+Format before committing:
+
+```bash
+# Format all files
+dart format .
+
+# Check formatting
+dart format --output=none --set-exit-if-changed .
+if [ $? -ne 0 ]; then
+  echo "Some files are not formatted. Run 'dart format .' to fix."
+  exit 1
+fi
+```
+
+## Output Formats
+
+### Default Output
+
+```bash
+$ dart format lib/
+Formatted lib/main.dart
+Formatted lib/utils.dart
+Formatted 2 files (2 changed) in 0.5 seconds.
+```
+
+### JSON Output
+
+```bash
+$ dart format --output=json --show=changed .
+```
+
+```json
+{
+  "files": [
+    {
+      "path": "lib/main.dart",
+      "changed": true,
+      "source": "class MyClass {\n  void method() {\n    print('formatted');\n  }\n}\n"
+    },
+    {
+      "path": "lib/utils.dart",
+      "changed": false
+    }
+  ]
+}
+```
+
+### Machine-Readable Output
+
+```bash
+$ dart format --output=none --show=changed .
+lib/main.dart
+lib/utils.dart
+```
+
+## Exit Codes
+
+- `0` - Success (all files formatted or already formatted)
+- `1` - Files need formatting (when using `--set-exit-if-changed`)
+- `2` - Usage error (invalid arguments)
+
+## Configuration
+
+### Project-Level Configuration
+
+While the formatter doesn't have a configuration file, you can document your preferences:
+
+```yaml .dart_format
+# This file documents our formatting preferences
+line-length: 80
+indent: 2
+```
+
+Then use a script to apply these settings:
+
+```bash scripts/format.sh
+#!/bin/bash
+dart format --line-length=80 --indent=2 "$@"
+```
+
+### Makefile Helper
+
+```makefile Makefile
+LINE_LENGTH ?= 80
+
+format:
+	dart format --line-length=$(LINE_LENGTH) .
+
+format-check:
+	dart format --line-length=$(LINE_LENGTH) --output=none --set-exit-if-changed .
+```
+
+## Best Practices
+
+### 1. Format Early and Often
+
+Format code before committing:
+
+```bash
+git add .
+dart format .
+git commit -m "Your message"
+```
+
+### 2. Automate Formatting
+
+Use pre-commit hooks or IDE integration to format automatically.
+
+### 3. Consistent Line Length
+
+Choose a line length and stick with it across your project:
+
+```bash
+# Add to your Makefile or scripts/format.sh
+dart format --line-length=80 .
+```
+
+### 4. CI/CD Enforcement
+
+Fail builds if code isn't formatted:
+
+```bash
+dart format --output=none --set-exit-if-changed .
+if [ $? -ne 0 ]; then
+  echo "ERROR: Code is not formatted. Run 'dart format .' to fix."
+  exit 1
+fi
+```
+
+### 5. Team Agreement
+
+Document your formatting preferences in your project README.
+
+## Examples
+
+### Format Entire Project
+
+```bash
+# Format all Dart files
+dart format .
+
+# Output:
+# Formatted lib/main.dart
+# Formatted lib/models/user.dart
+# Formatted test/main_test.dart
+# Formatted 3 files (3 changed) in 0.3 seconds.
+```
+
+### Verify Formatting in CI
+
+```bash ci_check.sh
+#!/bin/bash
+set -e
+
+echo "Checking Dart code formatting..."
+dart format --output=none --set-exit-if-changed .
+
+if [ $? -eq 0 ]; then
+  echo "✓ All files are properly formatted"
+else
+  echo "✗ Some files need formatting"
+  echo "Run 'dart format .' to fix"
+  exit 1
+fi
+```
+
+### Format Specific Files
+
+```bash
+# Format specific files only
+dart format lib/main.dart lib/utils.dart
+
+# Format all files in lib/models/
+dart format lib/models/
+
+# Format all test files
+dart format test/
+```
+
+## Troubleshooting
+
+### Formatter Not Found
+
+Ensure you have Dart SDK installed:
+
+```bash
+dart --version
+```
+
+### Files Not Being Formatted
+
+Check that files have `.dart` extension and are valid Dart code.
+
+### Unexpected Formatting
+
+The formatter follows the [Dart style guide](https://dart.dev/guides/language/effective-dart/style). If you find unexpected behavior, it's usually intentional based on style guidelines.
+
+## See Also
+
+- [Dart Style Guide](https://dart.dev/guides/language/effective-dart/style) - Official style recommendations
+- [Effective Dart](https://dart.dev/guides/language/effective-dart) - Best practices for Dart code
+- [dart_style package](https://pub.dev/packages/dart_style) - The underlying formatting library

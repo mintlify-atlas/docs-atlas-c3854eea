@@ -1,0 +1,599 @@
+---
+title: "Compiler Optimization Passes"
+description: "Complete guide to Dart VM optimization passes and compilation pipeline"
+---
+
+The Dart VM compiler applies a series of optimization passes to transform and improve code. Passes are defined in `runtime/vm/compiler/compiler_pass.cc` and executed in a specific order for maximum effectiveness.
+
+## Compilation Pipeline
+
+The main compilation pipeline (`RunPipeline`) executes passes in the following order:
+
+### Phase 1: SSA Construction
+
+<Accordion title="ComputeSSA">
+  **File**: `compiler_pass.cc:368`
+  
+  Transform the flow graph into Static Single Assignment (SSA) form.
+  
+  ```cpp
+  flow_graph->ComputeSSA(nullptr);
+  ```
+  
+  SSA ensures each variable is assigned exactly once, enabling many optimizations.
+</Accordion>
+
+### Phase 2: Type Propagation and Specialization
+
+<Accordion title="TypePropagation">
+  **File**: `compiler_pass.cc:386`
+  
+  Propagate type information through the flow graph.
+  
+  ```cpp
+  FlowGraphTypePropagator::Propagate(flow_graph);
+  ```
+  
+  **Purpose**:
+  - Infer precise types for values
+  - Enable type-based optimizations
+  - Support better code generation
+  
+  **Runs**: Multiple times throughout pipeline
+</Accordion>
+
+<Accordion title="ApplyClassIds">
+  **File**: `compiler_pass.cc:389`
+  
+  Apply class ID information from type propagation.
+  
+  ```cpp
+  state->call_specializer->ApplyClassIds();
+  ```
+  
+  Enables class-based optimizations and specialization.
+</Accordion>
+
+<Accordion title="ApplyICData">
+  **File**: `compiler_pass.cc:373`
+  
+  Apply Inline Cache data from runtime profiling.
+  
+  ```cpp
+  state->call_specializer->ApplyICData();
+  ```
+  
+  Uses runtime feedback to specialize calls based on observed types.
+</Accordion>
+
+### Phase 3: Inlining
+
+<Accordion title="SetOuterInliningId">
+  **File**: `compiler_pass.cc:377`
+  
+  Set up inlining metadata before inlining begins.
+  
+  ```cpp
+  FlowGraphInliner::SetInliningIdAndTryIndex(flow_graph, 0, kInvalidTryIndex);
+  ```
+</Accordion>
+
+<Accordion title="Inlining">
+  **File**: `compiler_pass.cc:381`
+  **Critical**: Yes - major optimization
+  
+  Inline function calls to eliminate call overhead and enable further optimizations.
+  
+  ```cpp
+  FlowGraphInliner inliner(flow_graph, state->precompiler);
+  state->inlining_depth = inliner.Inline();
+  ```
+  
+  **Benefits**:
+  - Eliminates call overhead
+  - Exposes optimization opportunities
+  - Improves constant propagation
+  - Enables better register allocation
+  
+  **Pipeline integration**: After inlining, the pipeline runs TypePropagation, ApplyClassIds, and other passes again to optimize the newly inlined code.
+</Accordion>
+
+### Phase 4: Simplification and Canonicalization
+
+<Accordion title="Canonicalize">
+  **File**: `compiler_pass.cc:397`
+  **Repeating**: Yes
+  
+  Simplify and normalize IL instructions.
+  
+  ```cpp
+  if (flow_graph->Canonicalize()) {
+    flow_graph->Canonicalize();
+  }
+  ```
+  
+  Transforms:
+  - Strength reduction (e.g., `x * 2` → `x << 1`)
+  - Algebraic simplification (e.g., `x + 0` → `x`)
+  - Instruction normalization
+  
+  Runs multiple times to reach fixed point.
+</Accordion>
+
+<Accordion title="TryOptimizePatterns">
+  **File**: `compiler_pass.cc:375`
+  
+  Pattern-based optimizations before representation selection.
+  
+  ```cpp
+  flow_graph->TryOptimizePatterns();
+  ```
+  
+  Optimizes patterns like:
+  - `(a << b) & c` bit manipulation
+  - Instruction merging opportunities
+</Accordion>
+
+<Accordion title="BranchSimplify">
+  **File**: `compiler_pass.cc:404`
+  
+  Simplify branch instructions.
+  
+  ```cpp
+  BranchSimplifier::Simplify(flow_graph);
+  ```
+  
+  - Remove redundant branches
+  - Merge blocks
+  - Eliminate empty blocks
+</Accordion>
+
+<Accordion title="IfConvert">
+  **File**: `compiler_pass.cc:406`
+  
+  Convert simple if-then-else patterns to conditional moves.
+  
+  ```cpp
+  IfConverter::Simplify(flow_graph);
+  ```
+  
+  Transforms:
+  ```dart
+  // Before:
+  if (condition) x = a; else x = b;
+  
+  // After:
+  x = condition ? a : b;  // Single instruction
+  ```
+</Accordion>
+
+### Phase 5: Constant Propagation
+
+<Accordion title="ConstantPropagation">
+  **File**: `compiler_pass.cc:408`
+  **Repeating**: Yes (up to 2 rounds)
+  
+  Propagate constant values and evaluate constant expressions.
+  
+  ```cpp
+  ConstantPropagator::Optimize(flow_graph);
+  return true;  // Repeatable
+  ```
+  
+  **Optimizations**:
+  - Constant folding
+  - Dead code elimination
+  - Unreachable code removal
+  
+  **Example**:
+  ```dart
+  const x = 10;
+  const y = 20;
+  var z = x + y;  // Becomes: var z = 30;
+  ```
+</Accordion>
+
+<Accordion title="OptimizeBranches">
+  **File**: `compiler_pass.cc:466`
+  
+  Optimize branches using constant propagation results.
+  
+  ```cpp
+  ConstantPropagator::OptimizeBranches(flow_graph);
+  ```
+  
+  Eliminates branches with constant conditions.
+</Accordion>
+
+### Phase 6: Integer Optimizations
+
+<Accordion title="OptimisticallySpecializeSmiPhis">
+  **File**: `compiler_pass.cc:415`
+  
+  Specialize loop phi nodes to Smi when profitable.
+  
+  ```cpp
+  LICM licm(flow_graph);
+  licm.OptimisticallySpecializeSmiPhis();
+  ```
+  
+  Optimizes integer loop counters.
+</Accordion>
+
+### Phase 7: Representation Selection
+
+<Accordion title="SelectRepresentations">
+  **File**: `compiler_pass.cc:420`
+  **Critical**: Yes - affects performance significantly
+  
+  Choose optimal representations for values (boxed vs unboxed).
+  
+  ```cpp
+  flow_graph->SelectRepresentations();
+  ```
+  
+  **Decisions**:
+  - Unbox doubles for arithmetic
+  - Unbox integers where profitable
+  - Minimize boxing/unboxing overhead
+  
+  **Example**:
+  ```dart
+  // Keeps value unboxed in registers:
+  double x = 1.0;
+  double y = x + 2.0;  // Unboxed double arithmetic
+  ```
+</Accordion>
+
+<Accordion title="SelectRepresentations_Final">
+  **File**: `compiler_pass.cc:427`
+  
+  Final representation selection after all optimizations.
+  
+  ```cpp
+  flow_graph->SelectRepresentations();
+  flow_graph->disallow_unmatched_representations();
+  ```
+  
+  Ensures all inputs/outputs have matching representations.
+</Accordion>
+
+### Phase 8: Common Subexpression Elimination
+
+<Accordion title="CSE (Common Subexpression Elimination)">
+  **File**: `compiler_pass.cc:438`
+  **Repeating**: Yes
+  
+  Eliminate redundant computations.
+  
+  ```cpp
+  return DominatorBasedCSE::Optimize(flow_graph);
+  ```
+  
+  **Example**:
+  ```dart
+  var a = x + y;
+  var b = x + y;  // CSE eliminates second computation
+  // Becomes:
+  var a = x + y;
+  var b = a;
+  ```
+</Accordion>
+
+### Phase 9: Loop Optimizations
+
+<Accordion title="LICM (Loop Invariant Code Motion)">
+  **File**: `compiler_pass.cc:440`
+  
+  Move loop-invariant computations outside loops.
+  
+  ```cpp
+  flow_graph->RenameUsesDominatedByRedefinitions();
+  LICM licm(flow_graph);
+  licm.Optimize();
+  flow_graph->RemoveRedefinitions(/*keep_checks*/ true);
+  ```
+  
+  **Example**:
+  ```dart
+  // Before:
+  for (var i = 0; i < n; i++) {
+    var x = y * 2;  // Invariant
+    result += x;
+  }
+  
+  // After:
+  var x = y * 2;  // Hoisted
+  for (var i = 0; i < n; i++) {
+    result += x;
+  }
+  ```
+</Accordion>
+
+### Phase 10: Dead Store Elimination
+
+<Accordion title="DSE (Dead Store Elimination)">
+  **File**: `compiler_pass.cc:452`
+  
+  Remove stores to variables that are never read.
+  
+  ```cpp
+  DeadStoreElimination::Optimize(flow_graph);
+  ```
+</Accordion>
+
+### Phase 11: Range Analysis
+
+<Accordion title="RangeAnalysis">
+  **File**: `compiler_pass.cc:454`
+  **Critical**: Yes - enables bounds check elimination
+  
+  Infer integer value ranges to eliminate bounds checks.
+  
+  ```cpp
+  RangeAnalysis range_analysis(flow_graph);
+  range_analysis.Analyze();
+  ```
+  
+  **Benefits**:
+  - Eliminates redundant array bounds checks
+  - Enables better integer optimizations
+  - Proves overflow cannot occur
+  
+  **Example**:
+  ```dart
+  for (var i = 0; i < arr.length; i++) {
+    arr[i] = 0;  // Bounds check eliminated
+  }
+  ```
+</Accordion>
+
+### Phase 12: Dead Code Elimination
+
+<Accordion title="EliminateDeadPhis">
+  **File**: `compiler_pass.cc:483`
+  
+  Remove unused phi instructions.
+  
+  ```cpp
+  DeadCodeElimination::EliminateDeadPhis(flow_graph);
+  ```
+</Accordion>
+
+<Accordion title="DCE (Dead Code Elimination)">
+  **File**: `compiler_pass.cc:486`
+  
+  Remove unreachable code and unused definitions.
+  
+  ```cpp
+  DeadCodeElimination::EliminateDeadCode(flow_graph);
+  ```
+</Accordion>
+
+### Phase 13: Allocation Optimizations
+
+<Accordion title="DelayAllocations (AOT only)">
+  **File**: `compiler_pass.cc:488`
+  
+  Delay allocations to reduce pressure on allocator.
+  
+  ```cpp
+  DelayAllocations::Optimize(flow_graph);
+  ```
+</Accordion>
+
+<Accordion title="AllocationSinking_Sink">
+  **File**: `compiler_pass.cc:490`
+  **Critical**: Yes - major optimization
+  
+  Sink allocations to reduce heap pressure and enable scalar replacement.
+  
+  ```cpp
+  state->sinking = new AllocationSinking(flow_graph);
+  state->sinking->Optimize();
+  ```
+  
+  Transforms:
+  - Move allocations closer to use
+  - Eliminate allocations that escape only to deopt
+  - Enable stack allocation
+</Accordion>
+
+<Accordion title="AllocationSinking_DetachMaterializations">
+  **File**: `compiler_pass.cc:498`
+  
+  Detach materialization instructions after allocation sinking.
+  
+  ```cpp
+  state->sinking->DetachMaterializations();
+  ```
+</Accordion>
+
+### Phase 14: Environment and Stack Optimizations
+
+<Accordion title="TryCatchOptimization">
+  **File**: `compiler_pass.cc:476`
+  
+  Optimize try-catch blocks.
+  
+  ```cpp
+  OptimizeCatchEntryStates(flow_graph, /*is_aot=*/CompilerState::Current().is_aot());
+  ```
+</Accordion>
+
+<Accordion title="EliminateEnvironments">
+  **File**: `compiler_pass.cc:481`
+  
+  Remove deoptimization environments where safe.
+  
+  ```cpp
+  flow_graph->EliminateEnvironments();
+  ```
+  
+  Reduces memory overhead of optimized code.
+</Accordion>
+
+<Accordion title="EliminateStackOverflowChecks">
+  **File**: `compiler_pass.cc:391`
+  
+  Remove redundant stack overflow checks.
+  
+  ```cpp
+  CheckStackOverflowElimination::EliminateStackOverflow(flow_graph);
+  ```
+</Accordion>
+
+### Phase 15: Write Barrier Elimination
+
+<Accordion title="EliminateWriteBarriers">
+  **File**: `compiler_pass.cc:528`
+  
+  Remove unnecessary write barriers for GC.
+  
+  ```cpp
+  EliminateWriteBarriers(flow_graph);
+  ```
+  
+  Improves performance by eliminating GC overhead where safe.
+</Accordion>
+
+### Phase 16: Dispatch and Call Optimizations
+
+<Accordion title="UseTableDispatch (AOT only)">
+  **File**: `compiler_pass.cc:434`
+  
+  Replace instance calls with dispatch table calls.
+  
+  ```cpp
+  state->call_specializer->ReplaceInstanceCallsWithDispatchTableCalls();
+  ```
+  
+  Faster dispatch in AOT mode.
+</Accordion>
+
+<Accordion title="OptimizeTypedDataAccesses (AOT only)">
+  **File**: `compiler_pass.cc:473`
+  
+  Optimize typed data array accesses.
+  
+  ```cpp
+  TypedDataSpecializer::Optimize(flow_graph);
+  ```
+</Accordion>
+
+### Phase 17: Code Generation Preparation
+
+<Accordion title="FinalizeGraph">
+  **File**: `compiler_pass.cc:530`
+  
+  Finalize the graph before code generation.
+  
+  ```cpp
+  FlowGraphInliner::CollectGraphInfo(flow_graph, /*constants_count*/ 0,
+                                     /*force*/ true, &instruction_count,
+                                     &call_site_count);
+  flow_graph->RemoveRedefinitions();
+  ```
+  
+  Prepares metadata and cleans up SSA constructs.
+</Accordion>
+
+<Accordion title="ReorderBlocks">
+  **File**: `compiler_pass.cc:526`
+  
+  Reorder basic blocks for better code locality.
+  
+  ```cpp
+  BlockScheduler::ReorderBlocks(flow_graph);
+  ```
+  
+  Improves instruction cache performance.
+</Accordion>
+
+<Accordion title="AllocateRegisters">
+  **File**: `compiler_pass.cc:508`
+  **Critical**: Yes - required for code generation
+  
+  Assign registers to values.
+  
+  ```cpp
+  flow_graph->InsertMoveArguments();
+  flow_graph->GetLoopHierarchy();
+  FlowGraphAllocator allocator(*flow_graph);
+  allocator.AllocateRegisters();
+  ```
+  
+  Uses linear scan register allocation.
+</Accordion>
+
+### Phase 18: Final Transformations
+
+<Accordion title="LoweringAfterCodeMotionDisabled">
+  **File**: `compiler_pass.cc:563`
+  
+  Lower high-level operations after code motion completes.
+  
+  ```cpp
+  flow_graph->ExtractNonInternalTypedDataPayloads();
+  flow_graph->AddAsanMsanInstrumentation();
+  flow_graph->AddTsanInstrumentation();
+  ```
+  
+  Adds sanitizer instrumentation if enabled.
+</Accordion>
+
+<Accordion title="TestILSerialization">
+  **File**: `compiler_pass.cc:545`
+  
+  Test IL serialization (if enabled).
+  
+  ```cpp
+  if (FLAG_test_il_serialization && CompilerState::Current().is_aot()) {
+    // Serialize and deserialize for testing
+  }
+  ```
+  
+  Final pass - validates IL can be serialized.
+</Accordion>
+
+## Pass Flags and Control
+
+Control passes with `--compiler-passes` flag:
+
+```bash
+# Disable a pass
+--compiler-passes=-Inlining
+
+# Print IL after a pass
+--compiler-passes=TypePropagation
+
+# Print IL before a pass
+--compiler-passes=[Canonicalize
+
+# Print before and after
+--compiler-passes=*CSE
+
+# Print after all passes
+--compiler-passes=*
+```
+
+Sticky flags with `+`:
+```bash
+--compiler-passes=Inlining+  # Print after Inlining and all subsequent passes
+```
+
+## Inlining Sub-Pipeline
+
+When inlining functions, a sub-pipeline runs on inlined code:
+
+```cpp
+RunInliningPipeline(mode, pass_state):
+  - ApplyClassIds
+  - TypePropagation
+  - ApplyICData
+  - Canonicalize
+  - ConstantPropagation
+  - TryOptimizePatterns
+```
+
+This ensures inlined code is optimized before continuing the main pipeline.

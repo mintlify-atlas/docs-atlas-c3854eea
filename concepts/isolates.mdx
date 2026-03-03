@@ -1,0 +1,431 @@
+---
+title: Isolates and Concurrency
+description: Understanding Dart's isolate-based concurrency model and message passing
+---
+
+## What are Isolates?
+
+An **isolate** is an isolated Dart universe with its own:
+
+- Memory heap
+- Global state (variables, libraries)
+- Thread of control (mutator thread)
+
+Isolates are the fundamental unit of concurrency in Dart. Unlike traditional shared-memory threading, isolates **cannot share mutable state** - they communicate exclusively through message passing.
+
+<Info>
+The isolate model prevents data races and eliminates many concurrency bugs by design. There are no locks, mutexes, or race conditions to worry about.
+</Info>
+
+## Isolate Groups
+
+Isolates are organized into **isolate groups** that share:
+
+- A garbage-collected heap
+- The same Dart program code
+- VM internal structures
+
+```
+                    pseudo isolate for
+                    shared immutable objects
+                    like null, true, false.
+                    ┌────────────┐
+                    │ VM Isolate │       heaps can reference
+                    │ ╭────────╮ │       vm-isolate heap.
+           ┏━━━━━━━━━▶│ Heap   │◀━━━━━━━━━━━━━━━━┓
+           ┃        │ ╰────────╯ │               ┃
+           ┃        └────────────┘               ┃
+           ┃                                     ┃
+┌──────────┃─────────┐            ┌──────────────┃──────────┐
+│ IsolateGroup        │            │ IsolateGroup ┃          │
+│                     │            │              ┃          │
+│ ╭───────────────────┃──────╮     │ ╭────────────┃────────╮ │
+│ │ GC managed Heap          │ ╳   │ │ GC managed Heap     │ │
+│ ╰──────────────────────────╯     │ ╰─────────────────────╯ │
+│  ┌─────────┐     ┌─────────┐     │  ┌─────────┐ ┌────────┐│
+│  │┌─────────┐    │┌─────────┐    │  │┌─────────┐│┌──────┐││
+│  ││┌─────────┐   ││┌─────────┐   │  ││┌─────────││┌─────┐│││
+│  │││Isolate  │   │││         │   │  │││Isolate  ││││     ││││
+│  │││ globals │   │││ helper  │   │  │││ globals │││││helper│││
+│  │││ mutator │   │││ thread  │   │  │││ mutator ││││thread││││
+│  └││ thread  │   └││         │   │  └││ thread  │││└─────┘│││
+│   └│         │    └│         │   │   └│         ││└──────┘││
+│    └─────────┘     └─────────┘   │    └─────────┘└───────┘│
+└──────────────────────────────────┘  └─────────────────────┘
+                                      no cross-group references
+```
+
+<Note>
+Heap sharing between isolates in the same group is an implementation detail not observable from Dart code. Isolates in a group still cannot share mutable state directly.
+</Note>
+
+### Creating Isolates
+
+**Within the same group:**
+```dart
+import 'dart:isolate';
+
+void entryPoint(SendPort sendPort) {
+  sendPort.send('Hello from isolate!');
+}
+
+void main() async {
+  final receivePort = ReceivePort();
+  await Isolate.spawn(entryPoint, receivePort.sendPort);
+  print(await receivePort.first);
+}
+```
+
+**New isolate group:**
+```dart
+void main() async {
+  final receivePort = ReceivePort();
+  await Isolate.spawnUri(
+    Uri.parse('worker.dart'),
+    [],
+    receivePort.sendPort,
+  );
+  print(await receivePort.first);
+}
+```
+
+| Method | Isolate Group | Heap Sharing | Use Case |
+|--------|---------------|--------------|----------|
+| `Isolate.spawn` | Same group | Shared heap | Parallel tasks in same app |
+| `Isolate.spawnUri` | New group | Separate heap | Complete isolation, different programs |
+
+## Thread Model
+
+The relationship between OS threads and isolates is flexible:
+
+### Guaranteed Behavior
+
+1. **One isolate at a time**: An OS thread can only enter one isolate at a time
+2. **Single mutator**: Only one mutator thread can execute Dart code per isolate
+3. **Thread reuse**: The same OS thread can enter different isolates sequentially
+
+### Mutator Thread
+
+The **mutator thread** is the thread that:
+- Executes Dart code
+- Uses the VM's public C API
+- Mutates the heap
+
+<Info>
+While only one mutator thread is active per isolate, the same OS thread can serve as mutator for different isolates at different times.
+</Info>
+
+### Helper Threads
+
+Isolates can have multiple helper threads:
+
+- **Background JIT compiler** - Optimizes hot code without blocking execution
+- **GC sweeper threads** - Clean up garbage in parallel
+- **Concurrent GC markers** - Mark live objects concurrently
+
+## Thread Pool Architecture
+
+The VM uses a centralized thread pool (`dart::ThreadPool`) instead of dedicated threads:
+
+```dart
+// Conceptual example
+class ThreadPool {
+  void post(Task task) {
+    // Either:
+    // 1. Assign to idle thread
+    // 2. Spawn new thread if needed
+  }
+}
+
+class ConcurrentSweeperTask extends Task {
+  void run() {
+    // Perform GC sweeping
+  }
+}
+
+class MessageHandlerTask extends Task {
+  void run() {
+    // Process isolate messages
+  }
+}
+```
+
+**Benefits:**
+- Efficient thread reuse
+- Automatic scaling based on workload
+- No dedicated event loop thread per isolate
+
+<Note>
+The default message loop implementation doesn't spawn a dedicated thread. Instead, it posts a `MessageHandlerTask` to the thread pool when messages arrive.
+</Note>
+
+## Message Passing
+
+Isolates communicate by sending messages through **ports**:
+
+### Send and Receive Ports
+
+```dart
+import 'dart:isolate';
+
+// Worker isolate
+void worker(SendPort sendPort) {
+  final receivePort = ReceivePort();
+  sendPort.send(receivePort.sendPort);
+  
+  receivePort.listen((message) {
+    if (message == 'stop') {
+      receivePort.close();
+    } else {
+      final result = expensiveOperation(message);
+      sendPort.send(result);
+    }
+  });
+}
+
+// Main isolate
+void main() async {
+  final receivePort = ReceivePort();
+  final isolate = await Isolate.spawn(worker, receivePort.sendPort);
+  
+  final sendPort = await receivePort.first as SendPort;
+  
+  final response = ReceivePort();
+  sendPort.send({'data': 42, 'replyTo': response.sendPort});
+  
+  print('Result: ${await response.first}');
+  
+  sendPort.send('stop');
+  receivePort.close();
+}
+```
+
+### Message Copying
+
+When a message is sent:
+
+1. **Primitive values** (numbers, booleans, null) are copied
+2. **Immutable objects** (strings) may be shared or copied
+3. **Complex objects** are deep copied
+4. **SendPorts** can be transferred
+
+<Note>
+Ports are not network ports! They're in-process message channels between isolates.
+</Note>
+
+### Transferable Objects
+
+Some objects can be **transferred** instead of copied for efficiency:
+
+```dart
+import 'dart:typed_data';
+import 'dart:isolate';
+
+void worker(List<dynamic> args) {
+  final sendPort = args[0] as SendPort;
+  final data = args[1] as TransferableTypedData;
+  
+  // Materialize the data in this isolate
+  final bytes = data.materialize().asUint8List();
+  
+  // Process bytes...
+  sendPort.send('Done');
+}
+
+void main() async {
+  final receivePort = ReceivePort();
+  
+  final bytes = Uint8List(1000000);
+  // Transfer ownership instead of copying
+  final transferable = TransferableTypedData.fromList([bytes]);
+  
+  await Isolate.spawn(worker, [receivePort.sendPort, transferable]);
+  print(await receivePort.first);
+}
+```
+
+**Transferable Types:**
+- `TransferableTypedData`
+- `SendPort`
+- `Capability`
+
+## Isolate Communication Patterns
+
+### Request-Response
+
+```dart
+Future<R> compute<Q, R>(R Function(Q) callback, Q message) async {
+  final receivePort = ReceivePort();
+  final errorPort = ReceivePort();
+  
+  await Isolate.spawn(
+    _isolateEntry,
+    _IsolateConfiguration(
+      callback,
+      message,
+      receivePort.sendPort,
+      errorPort.sendPort,
+    ),
+  );
+  
+  final result = await receivePort.first;
+  receivePort.close();
+  errorPort.close();
+  
+  return result as R;
+}
+```
+
+### Long-Lived Worker
+
+```dart
+class IsolateWorker {
+  final Isolate _isolate;
+  final SendPort _sendPort;
+  final ReceivePort _receivePort;
+  
+  static Future<IsolateWorker> spawn() async {
+    final receivePort = ReceivePort();
+    final isolate = await Isolate.spawn(_worker, receivePort.sendPort);
+    final sendPort = await receivePort.first as SendPort;
+    return IsolateWorker._(isolate, sendPort, receivePort);
+  }
+  
+  Future<R> send<R>(dynamic message) async {
+    final responsePort = ReceivePort();
+    _sendPort.send({'message': message, 'replyTo': responsePort.sendPort});
+    return await responsePort.first as R;
+  }
+  
+  void kill() {
+    _isolate.kill();
+    _receivePort.close();
+  }
+}
+```
+
+### Broadcast to Multiple Isolates
+
+```dart
+class IsolatePool {
+  final List<Isolate> _isolates = [];
+  final List<SendPort> _sendPorts = [];
+  
+  Future<void> initialize(int size) async {
+    for (var i = 0; i < size; i++) {
+      final receivePort = ReceivePort();
+      final isolate = await Isolate.spawn(_worker, receivePort.sendPort);
+      final sendPort = await receivePort.first as SendPort;
+      _isolates.add(isolate);
+      _sendPorts.add(sendPort);
+    }
+  }
+  
+  void broadcast(dynamic message) {
+    for (final sendPort in _sendPorts) {
+      sendPort.send(message);
+    }
+  }
+}
+```
+
+## Isolate Lifecycle
+
+### Pausing and Resuming
+
+```dart
+final isolate = await Isolate.spawn(worker, args);
+
+// Pause execution
+final capability = isolate.pause();
+
+// Resume later
+isolate.resume(capability);
+```
+
+### Error Handling
+
+```dart
+final errorPort = ReceivePort();
+final isolate = await Isolate.spawn(
+  worker,
+  args,
+  onError: errorPort.sendPort,
+);
+
+errorPort.listen((error) {
+  print('Isolate error: $error');
+});
+```
+
+### Termination
+
+```dart
+// Graceful shutdown
+isolate.kill(priority: Isolate.beforeNextEvent);
+
+// Immediate kill
+isolate.kill(priority: Isolate.immediate);
+```
+
+## Performance Considerations
+
+### When to Use Isolates
+
+**Good use cases:**
+- CPU-intensive computations (image processing, parsing)
+- Parallel processing of independent data
+- Background tasks that shouldn't block UI
+
+**Not ideal for:**
+- Lightweight async operations (use `async`/`await`)
+- Shared state access (requires message copying)
+- Very frequent communication (message overhead)
+
+### Message Passing Overhead
+
+```dart
+// Expensive: Large object copy
+final largeList = List.generate(1000000, (i) => i);
+sendPort.send(largeList);  // Deep copy!
+
+// Better: Transfer typed data
+final bytes = Uint8List(1000000);
+final transferable = TransferableTypedData.fromList([bytes]);
+sendPort.send(transferable);  // Ownership transfer
+
+// Best: Send reference to shared resource
+sendPort.send(fileHandle);  // Just the handle
+```
+
+## Debugging Isolates
+
+### Naming Isolates
+
+```dart
+final isolate = await Isolate.spawn(
+  worker,
+  args,
+  debugName: 'ImageProcessor',
+);
+```
+
+### Observatory Integration
+
+The Dart Observatory (DevTools) shows:
+- All active isolates
+- Memory usage per isolate
+- CPU time per isolate
+- Message queue depth
+
+## Summary
+
+Dart's isolate model provides:
+
+- **Safe concurrency** without shared memory or locks
+- **Flexible thread management** via thread pools
+- **Message-based communication** between isolated contexts
+- **Efficient parallelism** for CPU-bound tasks
+- **Scalable architecture** from mobile to server
+
+Understanding isolates is essential for building responsive, concurrent Dart applications that efficiently utilize multi-core processors while avoiding concurrency bugs.

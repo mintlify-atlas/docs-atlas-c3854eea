@@ -1,0 +1,431 @@
+---
+title: Snapshots and Serialization
+description: Understanding Dart VM snapshots for fast startup and deployment
+---
+
+## What are Snapshots?
+
+A **snapshot** is a serialized representation of a Dart isolate's heap - the object graph residing in memory. Snapshots allow the VM to:
+
+- **Fast startup** - Recreate program state without parsing source or compiling
+- **Efficient deployment** - Distribute pre-compiled applications
+- **Optimized execution** - Include pre-optimized or AOT-compiled code
+
+```
+                                            ┌──────────────┐
+                     SNAPSHOT              ┌──────────────┐│
+┌──────────────┐           ╭─────────╮           ┌──────────────┐││
+│ HEAP         │           │ 0101110 │           │ HEAP         │││
+│     ██       │           │ 1011010 │           │     ██       │││
+│    ╱  ╲      │           │ 1010110 │           │    ╱  ╲      │││
+│  ██╲   ██    │           │ 1101010 │           │  ██╲   ██    │││
+│     ╲ ╱  ╲   │┣━━━━━━━━━▶│ 0010101 │┣━━━━━━━━━▶│     ╲ ╱  ╲   │││
+│      ╳   ██  │ serialize │ 0101011 │deserialize│      ╳   ██  │││
+│     ╱ ╲  ╱   │           │ 1111010 │           │     ╱ ╲  ╱   │││
+│   ██   ██    │           │ 0010110 │           │   ██   ██    ││┘
+│              │           │ 0001011 │           │              │┘
+└──────────────┘           ╰─────────╯           └──────────────┘
+```
+
+<Info>
+The snapshot concept has roots in Smalltalk images, which were inspired by Alan Kay's M.Sc thesis. Dart VM uses clustered serialization for efficient binary deployment.
+</Info>
+
+## Snapshot Format
+
+Snapshots are optimized for **fast startup**, not human readability:
+
+- Low-level binary format
+- List of objects to create
+- Instructions on how to connect them
+- Minimal deserialization overhead
+
+### Design Goals
+
+1. **Speed** - Faster than parsing source and building internal structures
+2. **Compactness** - Efficient storage and network transfer
+3. **Completeness** - Capture entire program state
+
+<Note>
+Snapshots use clustered serialization similar to techniques in "Parcels: Fast Binary Deployment" and "Clustered serialization with Fuel" papers.
+</Note>
+
+## Snapshot Types
+
+### 1. Core Snapshot
+
+Contains the Dart core libraries (`dart:core`, `dart:async`, etc.):
+
+```console
+# Platform snapshot used by tools
+out/ReleaseX64/vm_platform.dill
+```
+
+**Characteristics:**
+- Shared across all Dart applications
+- Contains kernel AST for core libraries
+- Required by compilation tools
+
+### 2. AppJIT Snapshot
+
+Captures JIT-compiled code after a training run:
+
+```
+                                            ┌──────────────┐
+                     SNAPSHOT              ┌──────────────┐│
+┌──────────────┐           ╭────╮╭────╮           ┌──────────────┐││
+│ HEAP         │           │ 01 ││    │           │ HEAP         │││
+│     ██       │           │ 10 ││ ░░◀──┐         │     ██       │││
+│    ╱  ╲      │           │ 10 ││    │ │         │    ╱  ╲      │││
+│  ██╲   ██    │           │ 11 ││    │ └────────────██╲   ██    │││
+│  ╱  ╲ ╱  ╲   │┣━━━━━━━━━▶│ 00 ││    │┣━━━━━━━━━▶│     ╲ ╱  ╲   │││
+│ ░░   ╳   ██  │ serialize │ 01 ││    │deserialize│      ╳   ██  │││
+│     ╱ ╲  ╱   │           │ 11 ││    │           │     ╱ ╲  ╱   │││
+│   ██   ██╲   │           │ 00 ││    │           │   ██   ██    ││┘
+│           ░░ │           │ 00 ││ ░░◀──────────────────────┘    │┘
+└──────────╱───┘           ╰────╯╰────╯           └──────────────┘
+          code               data  code                isolate can JIT more
+```
+
+**Creating AppJIT Snapshots:**
+
+```console
+# Train and create snapshot
+$ dart --snapshot-kind=app-jit --snapshot=dart2js.snapshot \
+  pkg/compiler/lib/src/dart2js.dart -o hello.js hello.dart
+
+# Run from snapshot
+$ dart dart2js.snapshot -o hello.js hello.dart
+```
+
+**Benefits:**
+- Eliminates JIT warm-up time
+- Includes optimized code from training
+- Can still JIT if execution profile differs
+- Ideal for CLI tools and servers
+
+**Use Cases:**
+- `dartanalyzer`
+- `dart2js`
+- Build tools
+- Server applications
+
+### 3. AOT Snapshot
+
+Contains ahead-of-time compiled machine code:
+
+```
+                                             ┌──────────────┐
+                     SNAPSHOT               ┌──────────────┐│
+┌──────────────┐           ╭────╮╭────╮           ┌──────────────┐││
+│ HEAP         │           │ 01 ││    │           │ HEAP         │││
+│     ██       │           │ 10 ││ ░░◀──┐         │     ██       │││
+│    ╱  ╲      │           │ 10 ││    │ │         │    ╱  ╲      │││
+│  ██╲   ██    │           │ 11 ││    │ └────────────██╲   ██    │││
+│  ╱  ╲ ╱  ╲   │┣━━━━━━━━━▶│ 00 ││    │┣━━━━━━━━━▶│     ╲ ╱  ╲   │││
+│ ░░   ╳   ██  │ serialize │ 01 ││    │deserialize│      ╳   ██  │││
+│     ╱ ╲  ╱   │           │ 11 ││    │           │     ╱ ╲  ╱   │││
+│   ██   ██╲   │           │ 00 ││    │           │   ██   ██    ││┘
+│           ░░ │           │ 00 ││ ░░◀──────────────────────┘    │┘
+└──────────╱───┘           ╰────╯╰────╯           └──────────────┘
+          code               data  code              CANNOT JIT
+```
+
+**Creating AOT Snapshots:**
+
+```console
+# Compile to native executable
+$ dart compile exe -o hello hello.dart
+
+# Run the executable
+$ ./hello
+Hello, World!
+```
+
+**Code Section:**
+- Machine code mapped directly into memory
+- No deserialization required for code
+- Becomes part of the heap immediately
+
+**Benefits:**
+- Fastest startup
+- No JIT overhead
+- Smaller runtime (precompiled runtime)
+- Consistent performance
+
+**Limitations:**
+- Cannot dynamically compile new code
+- Larger binary size
+- No runtime optimization based on execution profile
+
+**Use Cases:**
+- Mobile apps (Flutter)
+- Embedded systems
+- Platforms without JIT (iOS)
+- Production deployments requiring predictable performance
+
+## Precompiled Runtime
+
+AOT snapshots run on a **precompiled runtime** - a stripped version of the Dart VM:
+
+**Removed Components:**
+- JIT compiler
+- Kernel parser
+- Dynamic code loading
+
+**Retained Components:**
+- Garbage collector
+- Runtime type system
+- Object model
+- Service protocol (debugging)
+
+<Note>
+The precompiled runtime is significantly smaller than the full VM, reducing deployment size and memory footprint.
+</Note>
+
+## Snapshot Creation Process
+
+### AppJIT Process
+
+```
+┌─────────────┐     Training Run     ┌────────────────┐
+│ Dart Source │━━━━━━━━━━━━━━━━━━━━━▶│ JIT Compiles   │
+└─────────────┘                       │ Hot Functions  │
+                                      └────────────────┘
+                                              ┃
+                                              ▼
+                                      ┌────────────────┐
+                                      │ Serialize Heap │
+                                      │ + Compiled Code│
+                                      └────────────────┘
+                                              ┃
+                                              ▼
+                                      ┌────────────────┐
+                                      │ AppJIT Snapshot│
+                                      └────────────────┘
+```
+
+**Steps:**
+1. Parse source to Kernel AST
+2. Execute with training data
+3. JIT compile hot functions
+4. Serialize heap including compiled code
+5. Write snapshot to disk
+
+### AOT Process
+
+```
+┌─────────────┐     CFE      ┌─────────────┐     TFA      ┌──────────────┐
+│ Dart Source │━━━━━━━━━━━━━▶│ Kernel AST  │━━━━━━━━━━━━▶│ Type Flow    │
+└─────────────┘              └─────────────┘              │ Analysis     │
+                                                           └──────────────┘
+                                                                   ┃
+                                                                   ▼
+                                                           ┌──────────────┐
+                                                           │ Tree Shaking │
+                                                           │ Optimization │
+                                                           └──────────────┘
+                                                                   ┃
+                                                                   ▼
+                                                           ┌──────────────┐
+                                                           │ AOT Compile  │
+                                                           │ All Functions│
+                                                           └──────────────┘
+                                                                   ┃
+                                                                   ▼
+                                                           ┌──────────────┐
+                                                           │ Serialize    │
+                                                           │ Heap + Code  │
+                                                           └──────────────┘
+```
+
+**Steps:**
+1. Parse source to Kernel AST
+2. Run type flow analysis (TFA)
+3. Tree-shake unreachable code
+4. AOT compile all reachable functions
+5. Serialize heap with code section
+6. Generate snapshot (binary or assembly)
+
+## Snapshot APIs
+
+The VM provides C API functions for snapshot creation:
+
+### AppJIT Snapshots
+
+```c
+// Create AppJIT snapshot as blobs
+Dart_CreateAppJITSnapshotAsBlobs(
+    uint8_t** isolate_snapshot_data_buffer,
+    intptr_t* isolate_snapshot_data_size,
+    uint8_t** isolate_snapshot_instructions_buffer,
+    intptr_t* isolate_snapshot_instructions_size
+);
+```
+
+### AOT Snapshots
+
+```c
+// Create AOT snapshot as assembly
+Dart_CreateAppAOTSnapshotAsAssembly(
+    const char* assembly_filename
+);
+
+// Create AOT snapshot as ELF
+Dart_CreateAppAOTSnapshotAsElf(
+    const char* elf_filename
+);
+```
+
+### Loading Snapshots
+
+```c
+// Create isolate from snapshot
+Dart_CreateIsolateGroup(
+    const char* script_uri,
+    const char* name,
+    const uint8_t* isolate_snapshot_data,
+    const uint8_t* isolate_snapshot_instructions,
+    // ... other parameters
+);
+```
+
+## Snapshot Inspection Tools
+
+### Viewing Kernel Snapshots
+
+```console
+# Generate Kernel binary
+$ dart pkg/vm/bin/gen_kernel.dart \
+  --platform out/ReleaseX64/vm_platform.dill \
+  -o hello.dill \
+  hello.dart
+
+# Dump textual representation
+$ dart pkg/vm/bin/dump_kernel.dart hello.dill hello.kernel.txt
+```
+
+### Analyzing AOT Snapshots
+
+```console
+# Generate with symbols
+$ dart compile exe --verbose \
+  --extra-gen-snapshot-options=--dwarf-stack-traces \
+  -o hello hello.dart
+
+# Examine with native tools
+$ nm hello  # Symbol table
+$ objdump -d hello  # Disassembly
+$ size hello  # Section sizes
+```
+
+## Snapshot Optimization Strategies
+
+### AppJIT Training
+
+**Effective training data:**
+
+```dart
+// BAD: Trivial training
+void main() {
+  print('hello');
+}
+
+// GOOD: Representative workload
+void main() {
+  // Exercise hot paths
+  for (var i = 0; i < 10000; i++) {
+    processData(generateTestData());
+  }
+  
+  // Trigger compilation of common cases
+  handleTypicalRequests();
+}
+```
+
+### AOT Size Reduction
+
+```console
+# Tree-shaking and minification
+$ dart compile exe \
+  --extra-gen-snapshot-options=--no-dwarf-stack-traces \
+  --extra-gen-snapshot-options=--strip \
+  -o hello hello.dart
+
+# Further strip with native tools
+$ strip hello
+```
+
+## Snapshot Compatibility
+
+<Note>
+Snapshots are **version-specific**. A snapshot created with one Dart SDK version may not work with another version.
+</Note>
+
+**Version Checking:**
+
+```dart
+import 'dart:io';
+
+void main() {
+  print('Dart version: ${Platform.version}');
+  // Dart version: 3.2.0 (stable) ...
+}
+```
+
+**Best Practices:**
+- Generate snapshots with the same SDK version as deployment
+- Include version metadata with distributed snapshots
+- Regenerate snapshots when updating SDK
+
+## Performance Comparison
+
+| Startup Method | Parse Time | Compile Time | Startup Speed | Memory |
+|----------------|------------|--------------|---------------|--------|
+| **Source** | High | High (JIT) | Slowest | Medium |
+| **Kernel** | Medium | High (JIT) | Slow | Medium |
+| **AppJIT** | None | Low (cached) | Fast | Medium |
+| **AOT** | None | None | Fastest | Low |
+
+### Measurement Example
+
+```console
+# Measure startup time
+$ time dart hello.dart
+real    0m0.234s
+
+$ time dart hello.snapshot
+real    0m0.089s
+
+$ time ./hello
+real    0m0.012s
+```
+
+## Snapshot Security Considerations
+
+<Info>
+Snapshots contain compiled code and can execute arbitrary operations. Treat snapshots like executable binaries.
+</Info>
+
+**Security Guidelines:**
+- Don't load snapshots from untrusted sources
+- Verify snapshot integrity (checksums, signatures)
+- Use secure distribution channels
+- Consider code signing for production
+
+## Summary
+
+Dart snapshots provide:
+
+- **Fast startup** through heap serialization
+- **Multiple modes** (AppJIT, AOT) for different use cases
+- **Efficient deployment** with pre-compiled code
+- **Flexible runtime** (full VM or precompiled)
+- **Platform support** from mobile to servers
+
+Choosing the right snapshot type:
+- **AppJIT** - CLI tools, servers with training data
+- **AOT** - Mobile apps, production deployments, platforms without JIT
+- **JIT** - Development, hot-reload workflows
+
+Understanding snapshots is key to optimizing Dart application deployment and startup performance.

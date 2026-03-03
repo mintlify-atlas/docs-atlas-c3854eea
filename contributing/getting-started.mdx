@@ -1,0 +1,144 @@
+---
+title: Getting Started with Contributions
+description: Learn how to set up your environment and make your first contribution to the Dart SDK
+---
+
+Want to contribute? Great! This guide will help you get started with contributing to the Dart SDK.
+
+## Ways You Can Contribute
+
+You can help the Dart project in many ways, in addition to contributing code:
+
+- [Report bugs](https://dartbug.com) to help improve the SDK
+- Ask and answer [Dart questions on StackOverflow](https://stackoverflow.com/questions/tagged/dart)
+- Improve the documentation
+- Contribute code fixes and new features
+
+### Documentation Contributions
+
+If you'd like to improve the documentation, you have three options:
+
+1. **Give us feedback:**
+   - If you're looking at a page with a **bug icon** at the **upper right**, click that icon to report a bug on the page
+   - To report an API doc bug, [create an SDK issue](https://github.com/dart-lang/sdk/issues/new?title=API%20doc%20issue:)
+
+2. **Contribute to Dart developer websites** such as [dart.dev](https://dart.dev) (repo: [dart-lang/site-www](https://github.com/dart-lang/site-www)). For more information, see [Writing for Dart and Flutter websites](https://github.com/dart-lang/site-shared/blob/master/doc/writing-for-dart-and-flutter-websites.md)
+
+3. **Improve API reference docs** at [api.dart.dev](https://api.dart.dev) by editing doc comments in the [Dart SDK repo](https://github.com/dart-lang/sdk/tree/main/sdk/lib). For more information, see [Effective Dart: Documentation](https://dart.dev/guides/language/effective-dart/documentation)
+
+## Before You Contribute
+
+### Sign the CLA
+
+Before we can use your code, you must sign the [Google Individual Contributor License Agreement](https://developers.google.com/open-source/cla/individual) (CLA). The CLA is necessary because you own the copyright to your changes, even after your contribution becomes part of our codebase.
+
+<Note>
+You don't have to sign the CLA until after you've submitted your code for review and a member has approved it, but you must do it before we can put your code into our codebase.
+</Note>
+
+<Info>
+Contributions made by corporations are covered by the [Software Grant and Corporate Contributor License Agreement](https://cla.developers.google.com/about/google-corporate).
+</Info>
+
+### Coordinate Large Contributions
+
+Before you start working on a larger contribution, you should get in touch with us first through the [Dart Issue Tracker](https://dartbug.com) with your idea so that we can help out and possibly guide you. Coordinating up front makes it much easier to avoid frustration later on.
+
+## Setting Up Your Environment
+
+<Steps>
+
+<Step title="Install depot_tools">
+In order to submit a patch from a local workspace, you need to install the Chromium [depot_tools](https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up).
+</Step>
+
+<Step title="Get the source code">
+To work with the Dart code, you need to download and build the development branch. Active development takes place on the `main` branch.
+
+<Warning>
+**You must use the `gclient` tool (`fetch`)!** Using `git clone` will not get you a functional environment.
+</Warning>
+
+Complete instructions are found at [Getting The Source](https://github.com/dart-lang/sdk/blob/main/docs/Building.md#getting-the-source).
+</Step>
+
+<Step title="Create a new branch">
+Create a new branch using `git new-branch` (a command added by depot_tools):
+
+```bash
+git new-branch <feature-name>
+```
+
+You can be in any branch when you run `git new-branch`.
+</Step>
+
+<Step title="Write and commit your code">
+Make your changes and commit them:
+
+```bash
+# Write code
+git commit
+# Continue working...
+git commit
+```
+</Step>
+
+</Steps>
+
+## Keeping Your Branch Updated
+
+As you work, and before you send a patch for review, ensure your branch is merging cleanly to `origin/main`.
+
+We recommend using `git rebase-update` (a feature added by depot_tools):
+
+```bash
+git rebase-update
+```
+
+You can run this command from any branch. This command will:
+- Fetch `origin/main`
+- Rebase all your open branches
+- Delete cleanly merged branches
+
+## Submission Methods
+
+All submissions, including submissions by project members, require review. We use the same code-review tools and process as the Chromium project.
+
+### GitHub Pull Requests
+
+This repository primarily uses [Gerrit for code reviews](https://dart-review.googlesource.com/), rather than GitHub PRs. However, you may submit a [GitHub PR](https://github.com/dart-lang/sdk/pulls), e.g. to edit some API documentation.
+
+<Info>
+GitHub PRs are automatically converted into a Gerrit change list (a "CL") by a copybara-service bot. You can find the link to that CL as a comment left on the PR by the bot. The PR will be automatically closed when the CL is reviewed and landed.
+</Info>
+
+### Gerrit Code Review
+
+The main flow is to use the Gerrit review system. See the [Code Review Workflow](/contributing/code-review) page for detailed instructions.
+
+## Coding Style
+
+The source code of Dart follows:
+
+- [Google C++ style guide](https://google.github.io/styleguide/cppguide.html)
+- [Dart style guide](https://dart.dev/guides/language/effective-dart/style)
+
+You should familiarize yourself with those guidelines.
+
+### File Headers
+
+All files in the Dart project must start with the following header:
+
+```dart
+// Copyright (c) 2017, the Dart project authors. Please see the AUTHORS file
+// for details. All rights reserved. Use of this source code is governed by a
+// BSD-style license that can be found in the LICENSE file.
+```
+
+<Note>
+The year should be a single number (not a range). If you edit an existing file, you don't have to update the year.
+</Note>
+
+## Code of Conduct
+
+We pledge to maintain an open and welcoming environment. For details, see our [code of conduct](https://dart.dev/code-of-conduct).

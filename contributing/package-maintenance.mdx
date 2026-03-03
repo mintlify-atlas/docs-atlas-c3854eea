@@ -1,0 +1,159 @@
+---
+title: Package Maintenance
+description: Guidelines for maintaining and versioning Dart SDK packages
+---
+
+## Versioning Packages
+
+### Bumping Versions
+
+Dart packages use [semver](https://semver.org) with two varieties of versioning schemes:
+
+- **For packages that are not yet stable**: `0.major.minor+patch`
+- **For most packages**: `major.minor.patch`
+
+<Warning>
+Never include a `+1` on a version if the first number is not `0`.
+</Warning>
+
+Version bump guidelines:
+
+- **Breaking changes**: Bump the _major_ version
+- **New features**: Bump the _minor_ version (including all non-breaking API changes)
+- **Bug fixes**: Bump the _patch_ version (documentation changes, or any other change which doesn't impact calling code)
+
+<Note>
+The Dart team culture was previously to keep packages at `0.x` for a long time, whereas now we prefer to publish `1.0.0` as soon as feasible to avoid confusion.
+</Note>
+
+## Making a Change
+
+Any time the code in the repo does not match exactly the code of a version published on `pub`, both the `pubspec.yaml` and `CHANGELOG.md` should include a `-wip` version.
+
+### When Opening a PR
+
+1. **Check if a `-wip` version exists**: If there is already a version, check what variety of version bump it is from the previous published version
+2. **Compare to your change type**: If necessary, "upgrade" the version change (e.g., if current `-wip` is a _patch_ and you're adding a feature, rewrite it as a _minor_ version change)
+3. **Add `-wip` if needed**: If the version is not currently a `-wip`, perform the appropriate version bump and add a `-wip`
+4. **Update CHANGELOG**: Add a section in the `CHANGELOG` to match. Include the `-wip` suffix in both places
+
+<Note>
+If the change has no external impact (e.g., safe refactoring or lint cleanup), it's OK to leave the `CHANGELOG` section empty.
+</Note>
+
+## Making Breaking Version Bumps
+
+Whenever you have the occasion to make a breaking version change, check if there are other minor breaking changes that should come with it:
+
+- Search the issue tracker for potential breaking changes (tagged with `next-breaking-release`)
+- Search the code for `@deprecated` members and remove them
+
+### Considerations Before Breaking Changes
+
+In most packages, a breaking version bump should be rare. Weight these factors against the value provided by the change:
+
+#### How many packages depend on this package?
+
+All of these packages will have to release a new version, and possibly make changes if they were actually broken by the changes.
+
+#### Will this change cause downstream breaking changes?
+
+<Warning>
+Be very careful about changes that cause cascading effects. For example, changing a sync API to be async could cause other packages to change their APIs to also be async, requiring them to do breaking changes as well.
+</Warning>
+
+#### Does this change break any internal projects?
+
+Anything which could break internal projects is potentially much more difficult to roll out. The entire internal codebase typically has to be migrated at once at the same time as the roll.
+
+**Mitigation strategies:**
+
+- Run potentially breaking changes through an internal presubmit before publishing externally
+- Roll out the breaking change incrementally, where both the new behavior can be opted into and the old is the default for some period of time
+- This allows internal code to be migrated one project at a time before removing the old behavior
+
+## Publishing a Package
+
+1. **Sync to google3**: Always sync the package into google3 before publishing so that it can be validated against a larger corpus of code
+2. **For SDK-rolled packages**: If the package rolls with SDK, update it in DEPS and publish only after the next successful SDK roll
+3. **Remove `-wip`**: Open a PR which removes the trailing `-wip` from the version in both the pubspec and the changelog
+4. **Run pub publish**: Don't ignore any warnings or errors reported by pub unless you are _completely_ confident they are safe to ignore
+5. **Add git tag**: Add a git tag with the version that was published (e.g., `git tag v1.2.3`)
+
+### Git Tag Guidelines
+
+- Check other tags in the repo to decide whether to include a leading `v` in the tag (`git tag` or `git tag -l`)
+- New repositories should prefer to include the `v`
+- In a [mono repo](https://en.wikipedia.org/wiki/Monorepo), start the tag with the name of the package (e.g., `build_runner-v1.7.0`)
+- Be sure to `git push --tags` after adding a tag
+- You can tag a specific commit with `git tag v1.2.3 <commit-hash>`
+
+## Handling Pull Requests
+
+### Squash and Merge
+
+Pull requests should usually have a 1:1 correspondence with final commits. Use "Squash and merge" after a review.
+
+### Never Force Push
+
+<Warning>
+Once a pull request is sent for review, commits on that branch should be considered shared history. Never force push to a branch with an open pull request.
+</Warning>
+
+**Reasons:**
+
+- Comments are tied to commits, so force pushing destroys comment history in GitHub PRs
+- Pushing a new commit with code review updates makes it easy to review changes since your last review by looking at the new commits only
+
+### Best Practices
+
+- Prefer to merge into the branch to resolve conflicts, not rebase
+- Add comments from the "Files changed" view, even as the PR author, so they can be sent in a batch
+- Use the [gh cli tool](https://cli.github.com/) to checkout a PR when changes may be easier to understand in an IDE
+
+## Working with Monorepos
+
+### Syncing Individual Package Updates to the SDK
+
+Typical package rolls into the Dart SDK are atomic for all packages in a mono repo. If some change in the history of the main branch is blocking the roll and a required fix was committed after the roll became blocked, follow these steps:
+
+1. **Create a branch** from a commit known safe to roll to the SDK:
+   ```bash
+   git checkout -b <branch name> <SHA>
+   ```
+
+2. **Cherry pick** any required fixes for the package:
+   - Typically this should not involve merge conflicts
+   - If conflicts occur, resolve them in favor of the version that should be synced to the SDK
+   - Do not make any commits that are not cherry picks
+
+3. **Open a PR** to merge this branch into the main branch but _do not submit it_:
+   - Run CI like normal on this PR
+
+4. **After passing CI**, sync with an admin for the repo:
+   - Ask a repo admin to create a _merge_ commit (not rebase or squash merge)
+   - This may require temporarily changing repository settings
+   - The merge should not have conflicts
+
+5. **Wait for mirror update**:
+   - Wait for the repository mirror to update
+   - Update DEPS to reference the SHA of the commit from the PR
+
+<Note>
+If there is any confusion, reach out to an admin for the repo early and they will be able to help.
+</Note>
+
+## Merging GitHub PR Contributions
+
+While creating Gerrit reviews is the preferred approach to contribute to the Dart SDK, contributors sometimes create PRs.
+
+<Warning>
+**For administrators**: GitHub PRs MUST NOT be merged on GitHub for the SDK repo. Merging a GitHub PR directly breaks mirroring and the repository will be closed until mirroring is restored.
+</Warning>
+
+GitHub PRs are automatically synced to Gerrit if their owner has signed the CLA:
+
+- If the creator of the PR has a Gerrit user account, they will be added as a reviewer
+- The owner of the review is the "Copybara Service" user
+- Find all open or merged synced PRs in Gerrit [here](https://dart-review.googlesource.com/q/hashtag:%22github-pr%22+\(status:open%20OR%20status:merged\))
+- When the Gerrit CL is submitted, the PR will be closed automatically

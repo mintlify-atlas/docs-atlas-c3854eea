@@ -1,0 +1,543 @@
+---
+title: dart:ffi
+description: Foreign Function Interface for C interoperability
+---
+
+The `dart:ffi` library provides a Foreign Function Interface (FFI) for interoperability with the C programming language. It allows Dart code to call native C libraries and vice versa.
+
+<Warning>
+**Platform Availability:** dart:ffi is only available on Dart Native platforms (VM, AOT-compiled, and Flutter). It is **not available on the web**.
+</Warning>
+
+## Overview
+
+To use this library in your code:
+
+```dart
+import 'dart:ffi';
+```
+
+The dart:ffi library includes:
+- Native type representations (Int32, Double, Pointer, etc.)
+- Dynamic library loading
+- Struct and Union definitions
+- Function pointers and callbacks
+- Memory allocation and management
+
+## Loading Native Libraries
+
+### DynamicLibrary
+
+<ParamField path="DynamicLibrary" type="class">
+  Represents a loaded native library. Used to look up native functions and symbols.
+</ParamField>
+
+```dart
+import 'dart:ffi';
+import 'dart:io';
+
+// Load library based on platform
+DynamicLibrary loadLibrary() {
+  if (Platform.isAndroid || Platform.isLinux) {
+    return DynamicLibrary.open('libexample.so');
+  } else if (Platform.isIOS || Platform.isMacOS) {
+    return DynamicLibrary.open('libexample.dylib');
+  } else if (Platform.isWindows) {
+    return DynamicLibrary.open('example.dll');
+  }
+  throw UnsupportedError('Unsupported platform');
+}
+
+final dylib = loadLibrary();
+
+// Open executable (for symbols in main program)
+final executable = DynamicLibrary.executable();
+
+// Open process (for all loaded libraries)
+final process = DynamicLibrary.process();
+```
+
+## Native Types
+
+### Basic C Types
+
+<Accordion title="C Type Mappings">
+
+| C Type | Dart FFI Type | Size |
+|--------|---------------|------|
+| int8_t | Int8 | 1 byte |
+| uint8_t | Uint8 | 1 byte |
+| int16_t | Int16 | 2 bytes |
+| uint16_t | Uint16 | 2 bytes |
+| int32_t | Int32 | 4 bytes |
+| uint32_t | Uint32 | 4 bytes |
+| int64_t | Int64 | 8 bytes |
+| uint64_t | Uint64 | 8 bytes |
+| float | Float | 4 bytes |
+| double | Double | 8 bytes |
+| void* | Pointer | Platform dependent |
+| intptr_t | IntPtr | Platform dependent |
+| size_t | Size | Platform dependent |
+
+```dart
+import 'dart:ffi';
+
+// Using native types in function signatures
+typedef NativeAddFunc = Int32 Function(Int32 a, Int32 b);
+typedef DartAddFunc = int Function(int a, int b);
+
+final add = dylib.lookupFunction<NativeAddFunc, DartAddFunc>('add');
+var result = add(5, 3);  // 8
+```
+
+</Accordion>
+
+## Pointers
+
+<ParamField path="Pointer<T>" type="class">
+  Represents a pointer to native memory. Can point to primitives, structs, or functions.
+</ParamField>
+
+<Accordion title="Pointer Operations">
+
+```dart
+import 'dart:ffi';
+import 'package:ffi/ffi.dart';
+
+// Allocate memory
+final pointer = calloc<Int32>();
+
+// Store value
+pointer.value = 42;
+
+// Read value
+print(pointer.value);  // 42
+
+// Free memory
+calloc.free(pointer);
+
+// Pointer arithmetic
+final array = calloc<Int32>(5);
+for (var i = 0; i < 5; i++) {
+  (array + i).value = i * 10;
+}
+
+print((array + 2).value);  // 20
+
+calloc.free(array);
+
+// Null pointer
+final nullPtr = nullptr;
+if (pointer == nullptr) {
+  print('Pointer is null');
+}
+
+// Cast pointers
+final intPtr = calloc<Int32>();
+final voidPtr = intPtr.cast<Void>();
+final backToInt = voidPtr.cast<Int32>();
+
+// Address of pointer
+final address = pointer.address;
+final fromAddress = Pointer<Int32>.fromAddress(address);
+```
+
+</Accordion>
+
+## Calling Native Functions
+
+### Function Lookup
+
+```dart
+import 'dart:ffi';
+
+// Define native and Dart function signatures
+typedef NativeSquareFunc = Int32 Function(Int32 x);
+typedef DartSquareFunc = int Function(int x);
+
+// Look up function in library
+final square = dylib.lookupFunction<NativeSquareFunc, DartSquareFunc>('square');
+
+// Call the function
+var result = square(5);  // 25
+
+// Function with multiple parameters
+typedef NativeCalcFunc = Double Function(Double a, Double b, Int32 op);
+typedef DartCalcFunc = double Function(double a, double b, int op);
+
+final calculate = dylib.lookupFunction<NativeCalcFunc, DartCalcFunc>('calculate');
+var sum = calculate(10.5, 5.5, 0);  // 16.0
+```
+
+### Function Pointers
+
+```dart
+// Create function pointer from Dart function
+typedef NativeCallback = Int32 Function(Int32);
+typedef DartCallback = int Function(int);
+
+int myCallback(int x) => x * 2;
+
+// Convert Dart function to native function pointer
+final callbackPointer = Pointer.fromFunction<NativeCallback>(myCallback, 0);
+
+// Pass to native code
+typedef NativeRegisterFunc = Void Function(Pointer<NativeFunction<NativeCallback>>);
+typedef DartRegisterFunc = void Function(Pointer<NativeFunction<NativeCallback>>);
+
+final register = dylib.lookupFunction<NativeRegisterFunc, DartRegisterFunc>('register_callback');
+register(callbackPointer);
+```
+
+## Structs
+
+<ParamField path="Struct" type="class">
+  Base class for FFI struct types. Represents a C struct in Dart.
+</ParamField>
+
+<Accordion title="Struct Definition and Usage">
+
+```dart
+import 'dart:ffi';
+import 'package:ffi/ffi.dart';
+
+// Define a struct matching C struct
+final class Coordinate extends Struct {
+  @Double()
+  external double x;
+  
+  @Double()
+  external double y;
+  
+  external Pointer<Coordinate> next;
+}
+
+// Allocate and use struct
+final coord = calloc<Coordinate>();
+coord.ref.x = 10.0;
+coord.ref.y = 20.0;
+coord.ref.next = nullptr;
+
+print('X: ${coord.ref.x}, Y: ${coord.ref.y}');
+
+calloc.free(coord);
+
+// Array of structs
+final coords = calloc<Coordinate>(3);
+(coords + 0).ref.x = 1.0;
+(coords + 0).ref.y = 2.0;
+(coords + 1).ref.x = 3.0;
+(coords + 1).ref.y = 4.0;
+(coords + 2).ref.x = 5.0;
+(coords + 2).ref.y = 6.0;
+
+calloc.free(coords);
+
+// Nested structs
+final class Person extends Struct {
+  external Pointer<Utf8> name;
+  
+  @Int32()
+  external int age;
+  
+  external Pointer<Address> address;
+}
+
+final class Address extends Struct {
+  external Pointer<Utf8> street;
+  
+  external Pointer<Utf8> city;
+  
+  @Int32()
+  external int zipCode;
+}
+```
+
+</Accordion>
+
+## Memory Management
+
+### Allocation
+
+<Accordion title="Memory Allocation Methods">
+
+```dart
+import 'dart:ffi';
+import 'package:ffi/ffi.dart';
+
+// Allocate single value
+final intPtr = calloc<Int32>();
+intPtr.value = 42;
+calloc.free(intPtr);
+
+// Allocate array
+final array = calloc<Double>(10);
+for (var i = 0; i < 10; i++) {
+  (array + i).value = i * 1.5;
+}
+calloc.free(array);
+
+// Allocate struct
+final structPtr = calloc<Coordinate>();
+structPtr.ref.x = 1.0;
+structPtr.ref.y = 2.0;
+calloc.free(structPtr);
+
+// Using allocator from package:ffi
+final managed = using((Arena arena) {
+  // Allocations within this block are automatically freed
+  final ptr1 = arena<Int32>();
+  final ptr2 = arena<Double>(10);
+  
+  ptr1.value = 100;
+  return ptr1.value;
+});
+// All allocations freed here
+```
+
+</Accordion>
+
+### NativeFinalizer
+
+<ParamField path="NativeFinalizer" type="class">
+  Automatically calls a native function when a Dart object is garbage collected.
+</ParamField>
+
+```dart
+import 'dart:ffi';
+
+// Define finalizer
+typedef NativeFreeFunc = Void Function(Pointer<Void>);
+
+final finalizer = NativeFinalizer(
+  dylib.lookup<NativeFunction<NativeFreeFunc>>('free'),
+);
+
+class NativeResource {
+  final Pointer<Void> pointer;
+  
+  NativeResource(this.pointer) {
+    // Attach finalizer to automatically free memory
+    finalizer.attach(this, pointer);
+  }
+}
+
+// Memory will be freed when object is garbage collected
+var resource = NativeResource(calloc<Int32>().cast());
+```
+
+## Strings
+
+### String Conversion
+
+```dart
+import 'dart:ffi';
+import 'package:ffi/ffi.dart';
+
+// Dart String to C string (UTF-8)
+final dartString = 'Hello, World!';
+final cString = dartString.toNativeUtf8();
+
+// Pass to native function
+typedef NativePrintFunc = Void Function(Pointer<Utf8>);
+typedef DartPrintFunc = void Function(Pointer<Utf8>);
+
+final nativePrint = dylib.lookupFunction<NativePrintFunc, DartPrintFunc>('print_string');
+nativePrint(cString);
+
+// Free C string
+calloc.free(cString);
+
+// C string to Dart String
+typedef NativeGetNameFunc = Pointer<Utf8> Function();
+typedef DartGetNameFunc = Pointer<Utf8> Function();
+
+final getName = dylib.lookupFunction<NativeGetNameFunc, DartGetNameFunc>('get_name');
+final namePtr = getName();
+final name = namePtr.toDartString();
+print(name);
+// Note: Check library documentation for who owns the memory
+```
+
+## Arrays
+
+```dart
+import 'dart:ffi';
+import 'dart:typed_data';
+import 'package:ffi/ffi.dart';
+
+// Fixed-size array in struct
+final class Matrix extends Struct {
+  @Array(4, 4)
+  external Array<Double> values;
+}
+
+final matrix = calloc<Matrix>();
+for (var i = 0; i < 16; i++) {
+  matrix.ref.values[i] = i.toDouble();
+}
+calloc.free(matrix);
+
+// Dynamic array (pointer)
+final dynamicArray = calloc<Int32>(100);
+for (var i = 0; i < 100; i++) {
+  dynamicArray[i] = i;
+}
+calloc.free(dynamicArray);
+
+// Convert to Dart list
+final List<int> dartList = dynamicArray.asTypedList(100);
+```
+
+## ABI-Specific Types
+
+<ParamField path="AbiSpecificInteger" type="abstract class">
+  Represents integers that have different sizes on different ABIs (e.g., long, size_t).
+</ParamField>
+
+```dart
+import 'dart:ffi';
+
+// Define ABI-specific type
+final class MyAbiInt extends AbiSpecificInteger {
+  const MyAbiInt();
+}
+
+// Map to concrete types per ABI
+@AbiSpecificIntegerMapping({
+  Abi.androidArm: Int32(),
+  Abi.androidArm64: Int64(),
+  Abi.androidIA32: Int32(),
+  Abi.androidX64: Int64(),
+  // ... other platforms
+})
+final class SizeT extends AbiSpecificInteger {
+  const SizeT();
+}
+```
+
+## Callbacks
+
+### Creating Callbacks
+
+```dart
+import 'dart:ffi';
+
+// Define callback signature
+typedef NativeCompare = Int32 Function(Pointer<Void>, Pointer<Void>);
+typedef DartCompare = int Function(Pointer<Void>, Pointer<Void>);
+
+// Static callback function
+int compare(Pointer<Void> a, Pointer<Void> b) {
+  final aValue = a.cast<Int32>().value;
+  final bValue = b.cast<Int32>().value;
+  return aValue - bValue;
+}
+
+// Create function pointer (must be static or top-level)
+final comparePtr = Pointer.fromFunction<NativeCompare>(compare, 0);
+
+// Pass to native sorting function
+typedef NativeSortFunc = Void Function(
+  Pointer<Void> array,
+  Int32 length,
+  Pointer<NativeFunction<NativeCompare>> compare,
+);
+typedef DartSortFunc = void Function(
+  Pointer<Void> array,
+  int length,
+  Pointer<NativeFunction<NativeCompare>> compare,
+);
+
+final qsort = dylib.lookupFunction<NativeSortFunc, DartSortFunc>('qsort');
+```
+
+## Best Practices
+
+<Warning>
+1. **Always free allocated memory** to prevent memory leaks
+2. **Validate pointer ownership** - know who allocates and who frees
+3. **Use package:ffi** for helper functions like `calloc` and string conversion
+4. **Match C signatures exactly** - incorrect types cause crashes
+5. **Handle null pointers** - check for `nullptr` before dereferencing
+6. **Static callbacks only** - `Pointer.fromFunction` requires static/top-level functions
+</Warning>
+
+<Tip>
+**Use NativeFinalizer** to automatically clean up native resources when Dart objects are garbage collected. This helps prevent memory leaks.
+</Tip>
+
+## Common Patterns
+
+```dart
+// Safe pointer wrapper
+class NativePointer<T extends NativeType> {
+  final Pointer<T> _pointer;
+  bool _freed = false;
+  
+  NativePointer(this._pointer);
+  
+  T get value {
+    if (_freed) throw StateError('Pointer already freed');
+    return _pointer.value;
+  }
+  
+  void free() {
+    if (!_freed) {
+      calloc.free(_pointer);
+      _freed = true;
+    }
+  }
+}
+
+// Resource management with try-finally
+void processData() {
+  final ptr = calloc<Int32>(100);
+  try {
+    // Use ptr
+    for (var i = 0; i < 100; i++) {
+      ptr[i] = i;
+    }
+  } finally {
+    calloc.free(ptr);
+  }
+}
+```
+
+## Example: Complete FFI Integration
+
+```dart
+import 'dart:ffi';
+import 'dart:io';
+import 'package:ffi/ffi.dart';
+
+// Load library
+final DynamicLibrary nativeLib = Platform.isAndroid
+    ? DynamicLibrary.open('libnative.so')
+    : DynamicLibrary.process();
+
+// Define signatures
+typedef NativeHelloFunc = Pointer<Utf8> Function(Pointer<Utf8> name);
+typedef DartHelloFunc = Pointer<Utf8> Function(Pointer<Utf8> name);
+
+// Lookup function
+final hello = nativeLib.lookupFunction<NativeHelloFunc, DartHelloFunc>('hello');
+
+// Use it
+void main() {
+  final name = 'Dart'.toNativeUtf8();
+  try {
+    final result = hello(name);
+    print(result.toDartString());
+    // Assuming native code allocated result, we might need to free it
+  } finally {
+    calloc.free(name);
+  }
+}
+```
+
+## Related Resources
+
+- [C Interop Using dart:ffi](https://dart.dev/guides/libraries/c-interop) - Official guide
+- [package:ffi](https://pub.dev/packages/ffi) - Utilities for FFI
+- [package:ffigen](https://pub.dev/packages/ffigen) - Generate FFI bindings from C headers

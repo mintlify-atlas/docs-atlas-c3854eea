@@ -1,0 +1,532 @@
+---
+title: Native Extensions
+description: Create native C/C++ extensions that integrate with Dart code
+---
+
+Native extensions allow you to call C/C++ code from Dart using the Dart VM C API. This enables performance-critical operations, hardware access, and integration with existing native libraries.
+
+## Native Functions
+
+Native functions are C functions that can be called from Dart code. They receive arguments through the `Dart_NativeArguments` structure and set return values using `Dart_SetReturnValue()`.
+
+### Function Signature
+
+```c
+typedef void (*Dart_NativeFunction)(Dart_NativeArguments arguments);
+```
+
+All native functions follow this signature - they return void and receive a single `Dart_NativeArguments` parameter.
+
+### Dart_NativeArguments
+
+```c
+typedef struct _Dart_NativeArguments* Dart_NativeArguments;
+```
+
+This opaque structure provides access to:
+- Function arguments
+- Isolate group data
+- Return value setting
+
+## Accessing Arguments
+
+### Dart_GetNativeArgument
+
+```c
+Dart_EXPORT Dart_Handle Dart_GetNativeArgument(
+    Dart_NativeArguments args,
+    int index);
+```
+
+Gets the native argument at the specified index as a handle.
+
+<ParamField path="args" type="Dart_NativeArguments">
+  Native arguments structure passed to the function
+</ParamField>
+
+<ParamField path="index" type="int">
+  Zero-based index of the argument to retrieve
+</ParamField>
+
+**Returns:** Handle to the argument
+
+### Dart_GetNativeArgumentCount
+
+```c
+Dart_EXPORT int Dart_GetNativeArgumentCount(Dart_NativeArguments args);
+```
+
+Returns the number of arguments passed to the native function.
+
+### Type-Specific Argument Functions
+
+#### Dart_GetNativeIntegerArgument
+
+```c
+Dart_EXPORT Dart_Handle Dart_GetNativeIntegerArgument(
+    Dart_NativeArguments args,
+    int index,
+    int64_t* value);
+```
+
+Extracts an integer argument directly without creating a handle.
+
+<ParamField path="value" type="int64_t*">
+  Pointer to store the extracted integer value
+</ParamField>
+
+**Returns:** Success handle or error handle if argument is not an integer
+
+#### Dart_GetNativeBooleanArgument
+
+```c
+Dart_EXPORT Dart_Handle Dart_GetNativeBooleanArgument(
+    Dart_NativeArguments args,
+    int index,
+    bool* value);
+```
+
+Extracts a boolean argument.
+
+#### Dart_GetNativeDoubleArgument
+
+```c
+Dart_EXPORT Dart_Handle Dart_GetNativeDoubleArgument(
+    Dart_NativeArguments args,
+    int index,
+    double* value);
+```
+
+Extracts a double argument.
+
+#### Dart_GetNativeStringArgument
+
+```c
+Dart_EXPORT Dart_Handle Dart_GetNativeStringArgument(
+    Dart_NativeArguments args,
+    int index,
+    void** peer);
+```
+
+Gets a string argument and its peer pointer if available.
+
+## Setting Return Values
+
+### Dart_SetReturnValue
+
+```c
+Dart_EXPORT void Dart_SetReturnValue(
+    Dart_NativeArguments args,
+    Dart_Handle retval);
+```
+
+Sets the return value for a native function.
+
+<ParamField path="retval" type="Dart_Handle">
+  Handle to the return value. Can be an error handle to propagate errors.
+</ParamField>
+
+<Warning>
+If retval is an error handle, the error will be propagated once the native function exits. The function will still complete normally, allowing cleanup code to run.
+</Warning>
+
+### Type-Specific Return Functions
+
+#### Dart_SetIntegerReturnValue
+
+```c
+Dart_EXPORT void Dart_SetIntegerReturnValue(
+    Dart_NativeArguments args,
+    int64_t retval);
+```
+
+Sets an integer return value directly without creating a handle.
+
+#### Dart_SetBooleanReturnValue
+
+```c
+Dart_EXPORT void Dart_SetBooleanReturnValue(
+    Dart_NativeArguments args,
+    bool retval);
+```
+
+Sets a boolean return value.
+
+#### Dart_SetDoubleReturnValue
+
+```c
+Dart_EXPORT void Dart_SetDoubleReturnValue(
+    Dart_NativeArguments args,
+    double retval);
+```
+
+Sets a double return value.
+
+## Complete Native Function Example
+
+<CodeGroup>
+```c Simple Native Function
+// Native function that adds two integers
+void Add(Dart_NativeArguments args) {
+  // Get arguments
+  int64_t a, b;
+  Dart_Handle result;
+  
+  result = Dart_GetNativeIntegerArgument(args, 0, &a);
+  if (Dart_IsError(result)) {
+    Dart_SetReturnValue(args, result);
+    return;
+  }
+  
+  result = Dart_GetNativeIntegerArgument(args, 1, &b);
+  if (Dart_IsError(result)) {
+    Dart_SetReturnValue(args, result);
+    return;
+  }
+  
+  // Set return value
+  Dart_SetIntegerReturnValue(args, a + b);
+}
+```
+
+```c String Processing
+// Native function that processes a string
+void ProcessString(Dart_NativeArguments args) {
+  Dart_Handle str_handle = Dart_GetNativeArgument(args, 0);
+  
+  // Convert to C string
+  const char* c_str;
+  Dart_Handle result = Dart_StringToCString(str_handle, &c_str);
+  if (Dart_IsError(result)) {
+    Dart_SetReturnValue(args, result);
+    return;
+  }
+  
+  // Process the string
+  size_t len = strlen(c_str);
+  char* upper = malloc(len + 1);
+  for (size_t i = 0; i < len; i++) {
+    upper[i] = toupper(c_str[i]);
+  }
+  upper[len] = '\0';
+  
+  // Create Dart string and return
+  Dart_Handle result_str = Dart_NewStringFromCString(upper);
+  free(upper);
+  
+  Dart_SetReturnValue(args, result_str);
+}
+```
+
+```c Resource Management
+// Native function with proper resource cleanup
+void ProcessData(Dart_NativeArguments args) {
+  Dart_EnterScope();
+  
+  // Allocate resources
+  MyResource* resource = AllocateResource();
+  
+  // Get arguments and process
+  Dart_Handle arg = Dart_GetNativeArgument(args, 0);
+  Dart_Handle result = DoProcessing(arg, resource);
+  
+  // Always clean up, even on error
+  FreeResource(resource);
+  
+  // Set return value (error or success)
+  Dart_SetReturnValue(args, result);
+  
+  Dart_ExitScope();
+}
+```
+</CodeGroup>
+
+## Native Resolvers
+
+Native resolvers map Dart function names to C function pointers.
+
+### Dart_NativeEntryResolver
+
+```c
+typedef Dart_NativeFunction (*Dart_NativeEntryResolver)(
+    Dart_Handle name,
+    int num_of_arguments,
+    bool* auto_setup_scope);
+```
+
+Callback that resolves a native function name to a C function pointer.
+
+<ParamField path="name" type="Dart_Handle">
+  Handle to a Dart string containing the function name
+</ParamField>
+
+<ParamField path="num_of_arguments" type="int">
+  Number of arguments expected by the native function
+</ParamField>
+
+<ParamField path="auto_setup_scope" type="bool*">
+  Set to true if the VM should automatically setup a Dart API scope before calling the function. Most functions need this.
+</ParamField>
+
+**Returns:** Function pointer or NULL if not found
+
+### Dart_SetNativeResolver
+
+```c
+Dart_EXPORT Dart_Handle Dart_SetNativeResolver(
+    Dart_Handle library,
+    Dart_NativeEntryResolver resolver,
+    Dart_NativeEntrySymbol symbol);
+```
+
+Sets the native resolver for a library.
+
+<ParamField path="library" type="Dart_Handle">
+  Handle to the library
+</ParamField>
+
+<ParamField path="resolver" type="Dart_NativeEntryResolver">
+  Function that resolves native function names
+</ParamField>
+
+<ParamField path="symbol" type="Dart_NativeEntrySymbol">
+  Optional reverse resolver for mapping function pointers to symbols (can be NULL)
+</ParamField>
+
+## Complete Extension Example
+
+<CodeGroup>
+```c Native Extension
+#include "dart_api.h"
+#include <string.h>
+
+// Native function implementations
+void Add(Dart_NativeArguments args) {
+  int64_t a, b;
+  Dart_GetNativeIntegerArgument(args, 0, &a);
+  Dart_GetNativeIntegerArgument(args, 1, &b);
+  Dart_SetIntegerReturnValue(args, a + b);
+}
+
+void Multiply(Dart_NativeArguments args) {
+  int64_t a, b;
+  Dart_GetNativeIntegerArgument(args, 0, &a);
+  Dart_GetNativeIntegerArgument(args, 1, &b);
+  Dart_SetIntegerReturnValue(args, a * b);
+}
+
+void GetVersion(Dart_NativeArguments args) {
+  Dart_Handle version = Dart_NewStringFromCString("1.0.0");
+  Dart_SetReturnValue(args, version);
+}
+
+// Native resolver
+Dart_NativeFunction ResolveName(Dart_Handle name,
+                                int argc,
+                                bool* auto_setup_scope) {
+  // auto_setup_scope should be true for most functions
+  *auto_setup_scope = true;
+  
+  const char* c_name;
+  Dart_StringToCString(name, &c_name);
+  
+  if (strcmp(c_name, "Add") == 0 && argc == 2) {
+    return Add;
+  }
+  if (strcmp(c_name, "Multiply") == 0 && argc == 2) {
+    return Multiply;
+  }
+  if (strcmp(c_name, "GetVersion") == 0 && argc == 0) {
+    return GetVersion;
+  }
+  
+  return NULL;  // Not found
+}
+
+// Extension initialization
+Dart_EXPORT Dart_Handle my_extension_Init(Dart_Handle parent_library) {
+  if (Dart_IsError(parent_library)) {
+    return parent_library;
+  }
+  
+  // Set the native resolver
+  Dart_Handle result = Dart_SetNativeResolver(
+      parent_library,
+      ResolveName,
+      NULL  // No symbol resolver
+  );
+  
+  if (Dart_IsError(result)) {
+    return result;
+  }
+  
+  return Dart_Null();
+}
+```
+
+```dart Dart Side
+// my_extension.dart
+@pragma('vm:external-name', 'Add')
+external int add(int a, int b);
+
+@pragma('vm:external-name', 'Multiply')
+external int multiply(int a, int b);
+
+@pragma('vm:external-name', 'GetVersion')
+external String getVersion();
+
+void main() {
+  print('5 + 3 = ${add(5, 3)}');        // 8
+  print('5 * 3 = ${multiply(5, 3)}');   // 15
+  print('Version: ${getVersion()}');    // 1.0.0
+}
+```
+</CodeGroup>
+
+## Native Ports and Messaging
+
+Native ports allow asynchronous communication between Dart and native code.
+
+### Dart_NewNativePort
+
+```c
+Dart_EXPORT Dart_Port Dart_NewNativePort(
+    const char* name,
+    Dart_NativeMessageHandler handler,
+    bool handle_concurrently);
+```
+
+Creates a new native port for receiving messages.
+
+<ParamField path="name" type="const char*">
+  Name of the port for debugging
+</ParamField>
+
+<ParamField path="handler" type="Dart_NativeMessageHandler">
+  Callback function to handle incoming messages
+</ParamField>
+
+<ParamField path="handle_concurrently" type="bool">
+  Whether multiple messages can be processed concurrently
+</ParamField>
+
+**Returns:** Port ID or ILLEGAL_PORT on error
+
+### Dart_NativeMessageHandler
+
+```c
+typedef void (*Dart_NativeMessageHandler)(
+    Dart_Port dest_port_id,
+    Dart_CObject* message);
+```
+
+Callback for handling messages received on a native port.
+
+### Dart_PostCObject
+
+```c
+Dart_EXPORT bool Dart_PostCObject(
+    Dart_Port port_id,
+    Dart_CObject* message);
+```
+
+Posts a message to a port. Can be called from any thread.
+
+<ParamField path="port_id" type="Dart_Port">
+  Destination port ID
+</ParamField>
+
+<ParamField path="message" type="Dart_CObject*">
+  Message object graph to send
+</ParamField>
+
+**Returns:** True if message was enqueued
+
+## Advanced Features
+
+### Accessing Isolate Data
+
+```c
+Dart_EXPORT void* Dart_GetNativeIsolateGroupData(Dart_NativeArguments args);
+```
+
+Extracts the isolate group data from native arguments. Useful for accessing embedder-specific context.
+
+<CodeGroup>
+```c Using Isolate Data
+typedef struct {
+  int connection_count;
+  void* database;
+} MyAppData;
+
+void QueryDatabase(Dart_NativeArguments args) {
+  MyAppData* app_data = (MyAppData*)Dart_GetNativeIsolateGroupData(args);
+  
+  // Use app_data->database to perform query
+  PerformQuery(app_data->database);
+  
+  // Update connection count
+  app_data->connection_count++;
+}
+```
+</CodeGroup>
+
+### Batch Argument Retrieval
+
+```c
+Dart_EXPORT Dart_Handle Dart_GetNativeArguments(
+    Dart_NativeArguments args,
+    int num_arguments,
+    const Dart_NativeArgument_Descriptor* arg_descriptors,
+    Dart_NativeArgument_Value* arg_values);
+```
+
+Retrieves multiple arguments efficiently in a single call.
+
+<CodeGroup>
+```c Batch Arguments
+void ProcessMultiple(Dart_NativeArguments args) {
+  // Describe what we want to extract
+  const Dart_NativeArgument_Descriptor descriptors[3] = {
+    DART_NATIVE_ARG_DESCRIPTOR(Dart_NativeArgument_kInt64, 0),
+    DART_NATIVE_ARG_DESCRIPTOR(Dart_NativeArgument_kDouble, 1),
+    DART_NATIVE_ARG_DESCRIPTOR(Dart_NativeArgument_kBool, 2),
+  };
+  
+  // Extract all at once
+  Dart_NativeArgument_Value values[3];
+  Dart_Handle result = Dart_GetNativeArguments(args, 3, descriptors, values);
+  
+  if (!Dart_IsError(result)) {
+    int64_t int_val = values[0].as_int64;
+    double double_val = values[1].as_double;
+    bool bool_val = values[2].as_bool;
+    
+    // Process values...
+  }
+}
+```
+</CodeGroup>
+
+## Best Practices
+
+1. **Always use scopes** - Call `Dart_EnterScope()` at the start and `Dart_ExitScope()` at the end of native functions unless `auto_setup_scope` is true
+2. **Check errors** - Verify return values from API calls and propagate errors appropriately
+3. **Clean up resources** - Use `Dart_SetReturnValue()` to propagate errors while still allowing cleanup code to run
+4. **Use type-specific functions** - Prefer `Dart_GetNativeIntegerArgument()` over `Dart_GetNativeArgument()` for better performance
+5. **Set auto_setup_scope correctly** - Most functions need this to be true; only set false for lightweight functions
+6. **Thread safety** - Native message handlers can run on any thread; ensure proper synchronization
+
+## Common Pitfalls
+
+<Warning>
+- **Memory leaks** - Always delete persistent handles and free allocated memory
+- **Scope mismanagement** - Unbalanced Enter/Exit scope calls cause leaks or crashes
+- **Invalid handles** - Don't use handles after their scope has been exited
+- **Thread violations** - Don't call most Dart API functions from finalizers or message handlers without proper setup
+</Warning>
+
+## See Also
+
+- [Dart VM C API Overview](/api/dart-api) - Complete API reference
+- [Embedding Dart VM](/api/embedding) - Embedding the VM in applications

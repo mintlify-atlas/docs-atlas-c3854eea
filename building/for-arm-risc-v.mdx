@@ -1,0 +1,342 @@
+---
+title: Building for ARM and RISC-V
+description: Build the Dart SDK for ARM and RISC-V architectures
+---
+
+The Dart VM runs on a variety of ARM and RISC-V processors on Linux and Android. This guide explains how to build the Dart VM and SDK to target these platforms.
+
+<Warning>
+You must follow the steps in [Building from Source](/building/from-source) to set up the environment and properly fetch the source code. Cloning the repository or obtaining the source code through other means will not result in a successful build.
+</Warning>
+
+## Cross-Compilation Overview
+
+The build scripts download a Clang toolchain that can target X64, ARM, ARM64, or RISC-V64 and run on an X64 or ARM64 host.
+
+<Note>
+For most cases, you do not need to install a cross-compiler yourself. The build system handles this automatically.
+</Note>
+
+You only need to manually install a toolchain for:
+- Building on a RISC-V64 host
+- Targeting RISC-V32
+- Using a custom toolchain
+
+## Installing Cross-Compilers
+
+### Linux (Debian/Ubuntu)
+
+If you prefer to use the system toolchain or need a specific configuration, install the cross-compilers:
+
+```bash
+# To target x64
+sudo apt-get install g++-x86-64-linux-gnu
+
+# To target arm
+sudo apt-get install g++-arm-linux-gnueabihf
+
+# To target arm64
+sudo apt-get install g++-aarch64-linux-gnu
+
+# To target riscv64
+sudo apt-get install g++-riscv64-linux-gnu
+```
+
+### Android
+
+For Android targets, follow the setup in [Building for Android](/building/for-android).
+
+## Building for ARM and RISC-V
+
+### Using Default Toolchain (Clang)
+
+The simplest approach uses the automatically downloaded Clang toolchain:
+
+<CodeGroup>
+  ```bash ARM
+  ./tools/build.py --mode release --arch arm create_sdk
+  ```
+
+  ```bash ARM64
+  ./tools/build.py --mode release --arch arm64 create_sdk
+  ```
+
+  ```bash RISC-V 64
+  ./tools/build.py --mode release --arch riscv64 create_sdk
+  ```
+</CodeGroup>
+
+### Using System Toolchain (GCC)
+
+If you've installed system cross-compilers, use the `--no-clang` flag:
+
+<CodeGroup>
+  ```bash ARM
+  ./tools/build.py --no-clang --mode release --arch arm create_sdk
+  ```
+
+  ```bash ARM64
+  ./tools/build.py --no-clang --mode release --arch arm64 create_sdk
+  ```
+
+  ```bash RISC-V 64
+  ./tools/build.py --no-clang --mode release --arch riscv64 create_sdk
+  ```
+</CodeGroup>
+
+### Using Custom Toolchain
+
+To use a different toolchain, specify the prefix with the `-t` flag:
+
+<CodeGroup>
+  ```bash ARM Custom Toolchain
+  ./tools/build.py --no-clang -m release -a arm \
+    -t arm=/path/to/toolchain/prefix \
+    create_sdk
+  ```
+
+  ```bash ARM64 Custom Toolchain
+  ./tools/build.py --no-clang -m release -a arm64 \
+    -t arm64=/path/to/toolchain/prefix \
+    create_sdk
+  ```
+
+  ```bash RISC-V 32 Custom Toolchain
+  ./tools/build.py --no-clang -m release -a riscv32 \
+    -t riscv32=/path/to/toolchain/prefix \
+    create_sdk
+  ```
+
+  ```bash RISC-V 64 Custom Toolchain
+  ./tools/build.py --no-clang -m release -a riscv64 \
+    -t riscv64=/path/to/toolchain/prefix \
+    create_sdk
+  ```
+</CodeGroup>
+
+<Note>
+If the path to your gcc is `/path/to/toolchain/prefix-gcc`, use `/path/to/toolchain/prefix` as the toolchain prefix.
+</Note>
+
+## Building Runtime Only
+
+For faster builds when you only need the VM runtime:
+
+```bash
+./tools/build.py --mode release --arch arm64 runtime
+```
+
+This builds only the Dart VM runtime without the full SDK. The process also builds a VM that targets x64, which is used to generate some SDK components.
+
+## Building for Android
+
+The standalone Dart VM can also target Android:
+
+<CodeGroup>
+  ```bash Android ARM
+  ./tools/build.py --mode=release --arch=arm --os=android create_sdk
+  ```
+
+  ```bash Android ARM64
+  ./tools/build.py --mode=release --arch=arm64 --os=android create_sdk
+  ```
+
+  ```bash Android RISC-V 64
+  ./tools/build.py --mode=release --arch=riscv64 --os=android create_sdk
+  ```
+</CodeGroup>
+
+<Note>
+See [Building for Android](/building/for-android) for complete Android setup instructions.
+</Note>
+
+## Building Debian Packages
+
+You can create Debian packages for multiple architectures in a single build:
+
+```bash
+./tools/build.py --mode=release --arch=arm,arm64,riscv64 debian_package
+```
+
+This creates `.deb` packages for all specified architectures.
+
+## Testing Cross-Compiled Builds
+
+You can test cross-compiled builds even without the target hardware using QEMU.
+
+### Testing RISC-V Builds
+
+<Steps>
+  <Step title="Build the SDK and tests">
+    Cross-compile the RISC-V64 SDK and test targets:
+
+    ```bash
+    ./tools/build.py --mode release --arch riscv64 create_sdk
+    ./tools/build.py --mode release --arch riscv64 most run_ffi_unit_tests
+    ```
+  </Step>
+
+  <Step title="Install QEMU">
+    Install QEMU user-mode emulation:
+
+    ```bash
+    sudo apt install qemu-user qemu-user-static qemu-system
+    ```
+  </Step>
+
+  <Step title="Run tests with QEMU">
+    Set the QEMU library path and run tests:
+
+    ```bash
+    export QEMU_LD_PREFIX=/usr/riscv64-linux-gnu
+
+    ./tools/test.py \
+      --runtime vm \
+      --progress color \
+      --arch riscv64 \
+      --mode release \
+      --time \
+      --tasks 8 \
+      lib
+    ```
+  </Step>
+</Steps>
+
+### Simplified QEMU Testing
+
+If QEMU is properly configured, you can use the `--use-qemu` flag:
+
+```bash
+./tools/test.py -r vm -m release -a riscv64 --use-qemu lib
+```
+
+This automatically handles QEMU setup for cross-architecture testing.
+
+## Build Output Locations
+
+Cross-compiled builds are placed in architecture-specific directories:
+
+<CodeGroup>
+  ```bash ARM
+  out/ReleaseARM/dart-sdk
+  ```
+
+  ```bash ARM64
+  out/ReleaseARM64/dart-sdk
+  ```
+
+  ```bash RISC-V 64
+  out/ReleaseRISCV64/dart-sdk
+  ```
+</CodeGroup>
+
+## Multi-Architecture Builds
+
+You can build for multiple architectures in sequence:
+
+```bash
+# Build for multiple architectures
+./tools/build.py --mode=release --arch=arm create_sdk
+./tools/build.py --mode=release --arch=arm64 create_sdk
+./tools/build.py --mode=release --arch=riscv64 create_sdk
+```
+
+Each build goes to its own output directory, so they don't conflict.
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Toolchain not found">
+    If you're using `--no-clang` and get toolchain errors:
+
+    1. Verify the cross-compiler is installed:
+       ```bash
+       dpkg -l | grep g++-arm
+       ```
+
+    2. Check the compiler is in your PATH:
+       ```bash
+       which arm-linux-gnueabihf-g++
+       ```
+
+    3. Install missing cross-compilers as shown above.
+  </Accordion>
+
+  <Accordion title="QEMU tests fail">
+    If QEMU tests fail:
+
+    1. Ensure QEMU is installed:
+       ```bash
+       qemu-riscv64 --version
+       ```
+
+    2. Set the correct library prefix:
+       ```bash
+       export QEMU_LD_PREFIX=/usr/riscv64-linux-gnu
+       ```
+
+    3. Verify the prefix directory exists and contains libraries:
+       ```bash
+       ls -la $QEMU_LD_PREFIX/lib
+       ```
+  </Accordion>
+
+  <Accordion title="Android build fails">
+    Make sure you've set up Android dependencies:
+
+    1. Update your `.gclient` file:
+       ```python
+       "custom_vars": {
+         "download_android_deps": True,
+       },
+       ```
+
+    2. Sync dependencies:
+       ```bash
+       gclient sync
+       ```
+
+    3. See [Building for Android](/building/for-android) for details.
+  </Accordion>
+</AccordionGroup>
+
+## Development Workflow
+
+For RISC-V and ARM development without target hardware:
+
+<Steps>
+  <Step title="Make code changes">
+    Edit source code on your development machine.
+  </Step>
+
+  <Step title="Cross-compile">
+    Build for your target architecture:
+
+    ```bash
+    ./tools/build.py --mode release --arch riscv64 most run_ffi_unit_tests
+    ```
+  </Step>
+
+  <Step title="Test with QEMU">
+    Verify correctness using QEMU:
+
+    ```bash
+    ./tools/test.py -r vm -m release -a riscv64 --use-qemu lib
+    ```
+  </Step>
+
+  <Step title="Test on hardware (optional)">
+    For final verification, test on actual ARM/RISC-V hardware.
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Android Builds" icon="mobile" href="/building/for-android">
+    Build for Android devices and emulators
+  </Card>
+  <Card title="Testing" icon="flask" href="/testing">
+    Learn about testing the Dart SDK
+  </Card>
+</CardGroup>

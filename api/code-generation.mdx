@@ -1,0 +1,519 @@
+---
+title: "Code Generation and Lowering"
+description: "Guide to code generation, IL lowering, and machine code emission in Dart VM"
+---
+
+Code generation is the final phase of compilation where Intermediate Language (IL) instructions are lowered to native machine code. This process is implemented in `runtime/vm/compiler/backend/flow_graph_compiler.cc` and architecture-specific files.
+
+## Code Generation Architecture
+
+The code generation process consists of several stages:
+
+1. **IL Finalization**: Prepare IL for code generation
+2. **Register Allocation**: Assign registers to values
+3. **Instruction Lowering**: Convert IL to machine instructions
+4. **Code Emission**: Generate native code bytes
+5. **Metadata Generation**: Create debugging and deoptimization info
+
+## FlowGraphCompiler
+
+The `FlowGraphCompiler` class (`flow_graph_compiler.cc:135`) orchestrates code generation:
+
+```cpp
+FlowGraphCompiler::FlowGraphCompiler(
+    compiler::Assembler* assembler,
+    FlowGraph* flow_graph,
+    const ParsedFunction& parsed_function,
+    bool is_optimizing,
+    ZoneGrowableArray<const ICData*>* deopt_id_to_ic_data,
+    CodeStatistics* stats)
+```
+
+### Key Responsibilities
+
+<Accordion title="Block Ordering">
+  Determines the order blocks are emitted in native code.
+  
+  ```cpp
+  block_order_(*flow_graph->CodegenBlockOrder())
+  ```
+  
+  Optimized for:
+  - Cache locality
+  - Branch prediction
+  - Fall-through optimization
+</Accordion>
+
+<Accordion title="Exception Handling">
+  Generates exception handler tables.
+  
+  ```cpp
+  exception_handlers_list_ = 
+      new ExceptionHandlerList(parsed_function().function());
+  ```
+  
+  Maps try-catch blocks to code locations.
+</Accordion>
+
+<Accordion title="Deoptimization Support">
+  Creates deoptimization metadata for optimized code.
+  
+  ```cpp
+  deopt_infos_()  // Stores deopt information
+  ```
+  
+  Enables fallback to unoptimized code when assumptions fail.
+</Accordion>
+
+<Accordion title="Static Call Tracking">
+  Maintains table of static call targets.
+  
+  ```cpp
+  static_calls_target_table_()
+  ```
+  
+  Used for patching and reoptimization.
+</Accordion>
+
+## Register Allocation
+
+Register allocation (`linearscan.cc`) assigns registers to values using linear scan algorithm:
+
+```cpp
+FlowGraphAllocator allocator(*flow_graph);
+allocator.AllocateRegisters();
+```
+
+### Location Summary
+
+Each instruction defines its location requirements:
+
+```cpp
+virtual LocationSummary* MakeLocationSummary(Zone* zone, 
+                                             bool optimizing) const = 0;
+```
+
+**Location types** (`runtime/vm/compiler/backend/locations.h`):
+- `Location::RequiresRegister()`: Needs a CPU register
+- `Location::RequiresFpuRegister()`: Needs FPU register  
+- `Location::RegisterLocation(reg)`: Specific register
+- `Location::StackSlot(index)`: Stack location
+- `Location::Constant(value)`: Constant value
+
+**Example** (`il.h` instruction):
+```cpp
+LocationSummary* BinarySmiOp::MakeLocationSummary(Zone* zone, 
+                                                   bool opt) const {
+  const intptr_t kNumInputs = 2;
+  const intptr_t kNumTemps = 0;
+  LocationSummary* summary = new(zone) LocationSummary(
+      zone, kNumInputs, kNumTemps, LocationSummary::kNoCall);
+  summary->set_in(0, Location::RequiresRegister());
+  summary->set_in(1, Location::RequiresRegister());
+  summary->set_out(0, Location::RequiresRegister());
+  return summary;
+}
+```
+
+## Instruction Emission
+
+Each IL instruction implements `EmitNativeCode`:
+
+```cpp
+virtual void EmitNativeCode(FlowGraphCompiler* compiler);
+```
+
+### Architecture-Specific Code Generation
+
+Code generation is split across architecture files:
+
+- `il_x64.cc`: x64 (Intel/AMD 64-bit)
+- `il_arm64.cc`: ARM64 (Apple Silicon, etc.)
+- `il_arm.cc`: ARM32
+- `il_ia32.cc`: x86 (32-bit Intel)
+- `il_riscv.cc`: RISC-V
+
+### Example: Binary Smi Operation on x64
+
+```cpp
+void BinarySmiOp::EmitNativeCode(FlowGraphCompiler* compiler) {
+  const Register left = locs()->in(0).reg();
+  const Register right = locs()->in(1).reg();
+  const Register result = locs()->out(0).reg();
+  
+  switch (op_kind()) {
+    case Token::kADD:
+      __ addq(result, right);  // x64 add instruction
+      __ j(OVERFLOW, slow_path->entry_label());
+      break;
+    case Token::kSUB:
+      __ subq(result, right);
+      __ j(OVERFLOW, slow_path->entry_label());
+      break;
+    // ... other operations
+  }
+}
+```
+
+## Lowering Stages
+
+IL instructions are lowered in multiple stages:
+
+### Stage 1: High-Level Lowering
+
+Before register allocation:
+
+<Accordion title="SelectRepresentations">
+  Choose value representations (boxed vs unboxed).
+  
+  ```cpp
+  flow_graph->SelectRepresentations();
+  ```
+  
+  **Decisions**:
+  - Unbox doubles for arithmetic (avoid heap allocation)
+  - Keep Smis unboxed when possible
+  - Box only when necessary for calls/stores
+  
+  **Example**:
+  ```dart
+  double x = 1.0;
+  double y = x + 2.0;  // Unboxed double ops
+  double z = x * y;    // Stay unboxed
+  obj.field = z;       // Box only here
+  ```
+</Accordion>
+
+<Accordion title="InsertMoveArguments">
+  Insert move instructions for call arguments.
+  
+  ```cpp
+  flow_graph->InsertMoveArguments();
+  ```
+  
+  Explicitly represents argument passing in IL.
+</Accordion>
+
+### Stage 2: Post-Optimization Lowering
+
+After all optimizations:
+
+<Accordion title="ExtractNonInternalTypedDataPayloads">
+  Lower typed data access patterns.
+  
+  ```cpp
+  flow_graph->ExtractNonInternalTypedDataPayloads();
+  ```
+  
+  Separates base pointer from offset calculations.
+</Accordion>
+
+<Accordion title="Sanitizer Instrumentation">
+  Add runtime checks if sanitizers enabled.
+  
+  ```cpp
+  flow_graph->AddAsanMsanInstrumentation();  // Address/Memory sanitizer
+  flow_graph->AddTsanInstrumentation();      // Thread sanitizer
+  ```
+  
+  Helps catch bugs during development.
+</Accordion>
+
+## Memory Model and Calling Conventions
+
+### Stack Frame Layout
+
+Typical stack frame structure:
+
+```
++------------------+
+| Return Address   |
++------------------+
+| Saved FP         |
++------------------+ <- FP (Frame Pointer)
+| Spill Slots      |
++------------------+
+| Local Variables  |
++------------------+
+| Outgoing Args    |
++------------------+ <- SP (Stack Pointer)
+```
+
+### Calling Convention
+
+Dart uses platform-specific calling conventions defined in `dart_calling_conventions.cc`:
+
+**x64**:
+- Arguments: `RDI, RSI, RDX, RCX, R8, R9, [stack]`
+- Return: `RAX` (integers), `XMM0` (doubles)
+- Preserved: `RBX, R12-R15`
+
+**ARM64**:
+- Arguments: `R0-R7, [stack]`
+- Return: `R0` (integers), `V0` (doubles)
+- Preserved: `R19-R28`
+
+## Code Emission Examples
+
+### Example 1: Loading a Field
+
+```cpp
+void LoadField::EmitNativeCode(FlowGraphCompiler* compiler) {
+  const Register instance = locs()->in(0).reg();
+  const Register result = locs()->out(0).reg();
+  
+  // Load field at offset
+  __ LoadFieldFromOffset(result, instance, offset());
+  
+  // Emit null check if needed
+  if (calls_initializer()) {
+    compiler->GenerateCallWithDeopt(
+        source(), deopt_id(),
+        *StubCode::InitInstanceField_entry());
+  }
+}
+```
+
+### Example 2: Array Element Access
+
+```cpp
+void LoadIndexed::EmitNativeCode(FlowGraphCompiler* compiler) {
+  const Register array = locs()->in(0).reg();
+  const Register index = locs()->in(1).reg();
+  const Register result = locs()->out(0).reg();
+  
+  // Calculate element address
+  const intptr_t element_size = Instance::ElementSizeFor(cid);
+  __ LoadElementAddressForRegIndex(
+      result, array, index, element_size,
+      data_offset());
+  
+  // Load element
+  __ LoadFromOffset(result, result, 0);
+}
+```
+
+### Example 3: Static Call
+
+```cpp
+void StaticCall::EmitNativeCode(FlowGraphCompiler* compiler) {
+  // Setup arguments (already in correct locations)
+  
+  // Generate call
+  compiler->GenerateStaticCall(
+      deopt_id(),
+      source(),
+      function(),
+      ArgumentCount(),
+      locs());
+  
+  // Result already in RAX/R0 per calling convention
+}
+```
+
+## Deoptimization Metadata
+
+Optimized code includes deoptimization points:
+
+```cpp
+class CompilerDeoptInfo {
+  Environment* env_;           // Deopt environment
+  intptr_t deopt_id_;          // Unique deopt ID
+  DeoptReasonId reason_;       // Why deopt occurred
+};
+```
+
+### Deoptimization Environment
+
+Captures program state for deoptimization:
+
+```cpp
+class Environment {
+  GrowableArray<Value*> values_;  // Live values
+  Environment* outer_;            // Outer scope
+  intptr_t fixed_parameter_count_;
+};
+```
+
+**When deopt occurs**:
+1. Collect values from registers/stack per environment
+2. Reconstruct unoptimized frame
+3. Continue execution in unoptimized code
+
+## PC Descriptors
+
+Map machine code addresses to source positions:
+
+```cpp
+pc_descriptors_list_ = new DescriptorList(
+    zone(), 
+    &code_source_map_builder_->inline_id_to_function());
+```
+
+**Descriptor types**:
+- `kDeopt`: Deoptimization point
+- `kIcCall`: Instance call site
+- `kUnoptStaticCall`: Unoptimized static call
+- `kReturn`: Return instruction
+- `kOther`: Other significant points
+
+## Optimization Examples
+
+### Example 1: Smi Fast Path
+
+```dart
+// Dart code:
+int add(int a, int b) => a + b;
+
+// Generated code (x64):
+// Fast path - assume Smis:
+movq rax, rdi        // Load a
+addq rax, rsi        // Add b
+jo slow_path         // Jump if overflow
+ret
+
+slow_path:
+  // Call runtime for boxed arithmetic
+  call _add_runtime
+  ret
+```
+
+### Example 2: Bounds Check Elimination
+
+```dart
+// Dart code:
+for (var i = 0; i < arr.length; i++) {
+  sum += arr[i];
+}
+
+// With range analysis, bounds check eliminated:
+for (var i = 0; i < arr.length; i++) {
+  // No check - range analysis proved 0 <= i < length
+  sum += arr[i];  
+}
+```
+
+### Example 3: Inlined Field Access
+
+```dart
+class Point {
+  final double x;
+  final double y;
+}
+
+double distance(Point p) => p.x * p.x + p.y * p.y;
+
+// Generated code (no call overhead):
+// movsd xmm0, [rdi + offset_x]  // Load x directly
+// mulsd xmm0, xmm0               // x * x
+// movsd xmm1, [rdi + offset_y]  // Load y directly  
+// mulsd xmm1, xmm1               // y * y
+// addsd xmm0, xmm1               // sum
+// ret
+```
+
+## Architecture-Specific Optimizations
+
+### SIMD Support
+
+Vector operations for performance:
+
+```cpp
+void SimdOp::EmitNativeCode(FlowGraphCompiler* compiler) {
+  switch (kind()) {
+    case SimdOpKind::kFloat32x4Add:
+      __ addps(result, left, right);  // x64 SIMD add
+      break;
+    // ... other SIMD ops
+  }
+}
+```
+
+### Branch Prediction Hints
+
+Optimize for common paths:
+
+```cpp
+// Likely path:
+__ j(CONDITION, &target, compiler::Assembler::kNearJump);
+
+// Unlikely (e.g., error path):
+__ j(CONDITION, &target, compiler::Assembler::kFarJump);
+```
+
+### Loop Alignment
+
+Align hot loops for better performance:
+
+```cpp
+if (FLAG_align_all_loops) {
+  __ Align(32);  // 32-byte alignment for loop header
+}
+```
+
+## Code Statistics
+
+Track generated code metrics:
+
+```cpp
+CodeStatistics* stats = new CodeStatistics(
+    assembler,
+    flow_graph->function());
+```
+
+Collects:
+- Instruction counts per type
+- Code size breakdown
+- Optimization effectiveness
+
+## Debugging Generated Code
+
+### IL Printing
+
+Print IL at various stages:
+
+```bash
+dart --print-flow-graph file.dart
+```
+
+### Disassembly
+
+View generated machine code:
+
+```bash
+dart --disassemble-optimized file.dart
+```
+
+### Tracing
+
+Trace compilation:
+
+```bash
+dart --trace-compiler file.dart
+```
+
+## Performance Considerations
+
+### Instruction Selection
+
+- Use platform-specific instructions when available
+- Prefer register operations over memory
+- Minimize moves between register classes
+
+### Memory Access Patterns
+
+- Keep hot data in cache lines
+- Align frequently accessed data
+- Minimize pointer chasing
+
+### Call Overhead
+
+- Inline small functions aggressively
+- Use direct calls over indirect when possible
+- Specialize polymorphic calls
+
+## Further Reading
+
+- Register allocation: `runtime/vm/compiler/backend/linearscan.cc`
+- Architecture-specific IL: `runtime/vm/compiler/backend/il_<arch>.cc`
+- Assembler: `runtime/vm/compiler/assembler/assembler_<arch>.cc`

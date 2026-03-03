@@ -1,0 +1,145 @@
+---
+title: Dart Compilers Overview
+description: Overview of compilation strategies and compilers available in the Dart SDK
+---
+
+The Dart SDK provides multiple compilers tailored for different platforms and use cases. Understanding which compiler to use and when is essential for optimizing your application's performance and deployment strategy.
+
+## Compilation Modes
+
+Dart supports several compilation modes to balance development speed, runtime performance, and deployment requirements:
+
+### Just-in-Time (JIT) Compilation
+
+JIT compilation compiles Dart code to machine code at runtime. This mode is primarily used during development for fast iteration cycles with features like hot reload.
+
+**Advantages:**
+- Fast development cycles
+- Hot reload support
+- Optimizations based on runtime profiling
+- Best peak performance through adaptive optimization
+
+**Use cases:**
+- Development and testing
+- Dart VM in development mode
+- Flutter development mode
+
+### Ahead-of-Time (AOT) Compilation
+
+AOT compilation compiles Dart code to native machine code before execution. This produces standalone executables or platform-specific binaries.
+
+**Advantages:**
+- Fast startup time
+- Predictable performance
+- Smaller runtime footprint
+- Suitable for platforms that prohibit JIT
+
+**Use cases:**
+- Production mobile apps (iOS, Android)
+- Production desktop apps
+- Server deployments requiring fast startup
+
+## Available Compilers
+
+The Dart SDK includes several specialized compilers:
+
+### dart2js
+
+The Dart-to-JavaScript compiler produces optimized JavaScript for web deployment.
+
+- **Target:** JavaScript (ES5/ES6)
+- **Use case:** Production web applications
+- **Features:** Tree-shaking, minification, deferred loading
+
+[Learn more about dart2js →](/compilers/dart2js)
+
+### dart2wasm
+
+The Dart-to-WebAssembly compiler generates WebAssembly modules for modern web browsers.
+
+- **Target:** WebAssembly (Wasm)
+- **Use case:** High-performance web applications
+- **Features:** Near-native performance, compact binaries
+
+[Learn more about dart2wasm →](/compilers/dart2wasm)
+
+### dartdevc
+
+The Dart development compiler generates modular JavaScript with a focus on fast incremental compilation.
+
+- **Target:** JavaScript (ES6)
+- **Use case:** Web development and debugging
+- **Features:** Fast compilation, source maps, modular architecture
+
+[Learn more about dartdevc →](/compilers/dartdevc)
+
+### Native Compilers (AOT/JIT)
+
+The Dart VM's native compilers produce machine code for native platforms.
+
+- **Target:** x64, ARM, ARM64
+- **Use case:** Native applications (mobile, desktop, server)
+- **Features:** Adaptive optimization, snapshots
+
+[Learn more about AOT vs JIT →](/compilers/aot-jit)
+
+## Choosing the Right Compiler
+
+<Tabs>
+  <Tab title="Web Development">
+    **Development:** Use **dartdevc** for fast incremental compilation and debugging.
+    
+    **Production:** Use **dart2js** for optimized JavaScript or **dart2wasm** for WebAssembly support in modern browsers.
+  </Tab>
+  
+  <Tab title="Mobile Apps">
+    **Development:** Use **JIT** compilation via Flutter's debug mode for hot reload.
+    
+    **Production:** Use **AOT** compilation for fast startup and predictable performance.
+  </Tab>
+  
+  <Tab title="Desktop & Server">
+    **Development:** Use **JIT** compilation for rapid iteration.
+    
+    **Production:** Use **AOT** compilation for deployment, or JIT for workloads that benefit from adaptive optimization.
+  </Tab>
+</Tabs>
+
+## Compiler Pipeline
+
+All Dart compilers share a common front-end that handles:
+
+1. **Parsing** - Converting Dart source to an Abstract Syntax Tree (AST)
+2. **Type checking** - Verifying type correctness
+3. **Kernel generation** - Producing Kernel AST (intermediate representation)
+
+Each compiler then applies its own backend transformations:
+
+```
+╭─────────────╮      ╔═════════════╗      ╭────────────╮
+│ Dart Source │ ━━━▶ ║ Common      ║ ━━━▶ │ Kernel AST │
+╰─────────────╯      ║ Front-End   ║      ╰────────────╯
+                     ╚═════════════╝            │
+                                                 ▼
+        ┌────────────────────────────────────────────────────┐
+        │                                                    │
+   ╔═════════╗  ╔══════════╗  ╔═════════╗  ╔═══════════════╗
+   ║ dart2js ║  ║ dart2wasm║  ║ dartdevc║  ║ Native (AOT)  ║
+   ╚═════════╝  ╚══════════╝  ╚═════════╝  ╚═══════════════╝
+        │            │             │               │
+        ▼            ▼             ▼               ▼
+   JavaScript    WebAssembly   JavaScript    Machine Code
+```
+
+## Performance Considerations
+
+- **Startup time:** AOT < Wasm < JIT
+- **Peak performance:** JIT ≈ AOT > Wasm > JavaScript
+- **Code size:** Wasm < AOT < JavaScript (minified)
+- **Compilation speed:** dartdevc > JIT > dart2wasm > AOT > dart2js
+
+## Related Resources
+
+- [Dart compilation modes](https://dart.dev/overview#platform)
+- [Flutter compilation modes](https://docs.flutter.dev/perf/rendering-performance)
+- [Web compilation guide](https://dart.dev/web/deployment)

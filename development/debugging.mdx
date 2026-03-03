@@ -1,0 +1,276 @@
+---
+title: Debugging the Dart SDK
+description: Techniques and tools for debugging the Dart VM and compiler with sanitizers
+---
+
+When developing the Dart SDK, various debugging tools and sanitizers can help identify memory errors, race conditions, and undefined behavior.
+
+## Memory Sanitizers
+
+Sanitizers instrument code to detect runtime issues. They require special builds and environment configuration.
+
+### AddressSanitizer (ASan)
+
+Detects memory errors like use-after-free, buffer overflows, and memory leaks.
+
+<Steps>
+  <Step title="Set environment variables">
+    ```bash
+    export ASAN_OPTIONS="handle_segv=0:detect_leaks=1:detect_stack_use_after_return=0:disable_coredump=0:abort_on_error=1"
+    export ASAN_SYMBOLIZER_PATH="$PWD/buildtools/linux-x64/clang/bin/llvm-symbolizer"
+    ```
+    
+    <Note>
+    The `handle_segv=0` option is crucial when running test suites, as some tests intentionally segfault.
+    </Note>
+  </Step>
+  
+  <Step title="Build with ASan">
+    ```bash
+    ./tools/build.py --mode release --arch x64 --sanitizer asan \
+      runtime runtime_precompiled create_sdk
+    ```
+  </Step>
+  
+  <Step title="Run tests">
+    ```bash
+    ./tools/sdks/dart-sdk/bin/dart ./tools/test.dart \
+      -n dartk-asan-linux-release-x64 \
+      -N dartk-asan-linux-release-x64
+    ```
+  </Step>
+</Steps>
+
+**Legacy approach:**
+
+```bash
+./tools/gn.py -m release --asan
+./tools/build.py -m release runtime
+./tools/test.py -m release --builder-tag=asan -t240
+```
+
+### MemorySanitizer (MSan)
+
+Detects reads of uninitialized memory.
+
+<Steps>
+  <Step title="Set environment variables">
+    ```bash
+    export MSAN_OPTIONS="handle_segv=0:detect_leaks=1:detect_stack_use_after_return=0:disable_coredump=0:abort_on_error=1"
+    export MSAN_SYMBOLIZER_PATH="$PWD/buildtools/linux-x64/clang/bin/llvm-symbolizer"
+    ```
+  </Step>
+  
+  <Step title="Build with MSan">
+    ```bash
+    ./tools/build.py --mode release --arch x64 --sanitizer msan \
+      runtime runtime_precompiled create_sdk
+    ```
+  </Step>
+  
+  <Step title="Run tests">
+    ```bash
+    ./tools/sdks/dart-sdk/bin/dart ./tools/test.dart \
+      -n dartk-asan-linux-release-x64 \
+      -N dartk-msan-linux-release-x64
+    ```
+  </Step>
+</Steps>
+
+### LeakSanitizer (LSan)
+
+Detects memory leaks.
+
+<Steps>
+  <Step title="Set environment variables">
+    ```bash
+    export ASAN_OPTIONS="handle_segv=0:detect_leaks=1:detect_stack_use_after_return=0:disable_coredump=0:abort_on_error=1"
+    export ASAN_SYMBOLIZER_PATH="$PWD/buildtools/linux-x64/clang/bin/llvm-symbolizer"
+    ```
+  </Step>
+  
+  <Step title="Build with LSan">
+    ```bash
+    ./tools/build.py --mode release --arch x64 --sanitizer lsan \
+      runtime runtime_precompiled create_sdk
+    ```
+  </Step>
+  
+  <Step title="Run tests">
+    ```bash
+    ./tools/sdks/dart-sdk/bin/dart ./tools/test.dart \
+      -n dartk-asan-linux-release-x64 \
+      -N dartk-lsan-linux-release-x64
+    ```
+  </Step>
+</Steps>
+
+### ThreadSanitizer (TSan)
+
+Detects data races and threading issues.
+
+<Steps>
+  <Step title="Set environment variables">
+    ```bash
+    export TSAN_OPTIONS="handle_segv=0:disable_coredump=0:abort_on_error=1"
+    export TSAN_SYMBOLIZER_PATH="$PWD/buildtools/linux-x64/clang/bin/llvm-symbolizer"
+    ```
+  </Step>
+  
+  <Step title="Build with TSan">
+    ```bash
+    ./tools/build.py --mode release --arch x64 --sanitizer tsan \
+      dart runtime runtime_precompiled create_sdk
+    ```
+  </Step>
+  
+  <Step title="Run tests">
+    ```bash
+    ./tools/sdks/dart-sdk/bin/dart ./tools/test.dart \
+      -n dartk-asan-linux-release-x64 \
+      -N dartk-tsan-linux-release-x64
+    ```
+  </Step>
+</Steps>
+
+**Legacy approach:**
+
+```bash
+./tools/gn.py -m release --tsan
+./tools/build.py -m release runtime
+./tools/test.py -m release
+```
+
+### UndefinedBehaviorSanitizer (UBSan)
+
+Detects undefined behavior like integer overflow, null pointer dereference, etc.
+
+<Steps>
+  <Step title="Set environment variables">
+    ```bash
+    export UBSAN_OPTIONS="handle_segv=0:disable_coredump=0:abort_on_error=1"
+    export UBSAN_SYMBOLIZER_PATH="$PWD/buildtools/linux-x64/clang/bin/llvm-symbolizer"
+    ```
+  </Step>
+  
+  <Step title="Build with UBSan">
+    ```bash
+    ./tools/build.py --mode release --arch x64 --sanitizer ubsan \
+      runtime runtime_precompiled create_sdk
+    ```
+  </Step>
+  
+  <Step title="Run tests">
+    ```bash
+    ./tools/sdks/dart-sdk/bin/dart ./tools/test.dart \
+      -n dartk-linux-release-x64 \
+      -N dartk-ubsan-linux-release-x64
+    ```
+  </Step>
+</Steps>
+
+## Debugging VM Code
+
+### Noopt Mode
+
+Disables JIT optimization for easier debugging:
+
+```bash
+# Build noopt runtime
+./tools/build.py -mdebug,release runtime_and_noopt
+
+# Run tests without optimization
+./tools/test.py -mdebug,release --noopt
+```
+
+### ASan with VM Development
+
+AddressSanitizer works at the C++ level and doesn't automatically know about JIT-generated code or low-level stack manipulation.
+
+#### Manual Stack Unpoisoning
+
+Use the `ASAN_UNPOISON(ptr, len)` macro to inform ASan about stack regions manipulated outside normal C++ code:
+
+```cpp
+// After manually manipulating stack
+ASAN_UNPOISON(stack_ptr, stack_size);
+```
+
+#### Getting Real Stack Pointer
+
+When running with `detect_stack_use_after_return=1`, ASan returns fake stack pointers. Use `Isolate::GetCurrentStackPointer()` to get the real stack pointer:
+
+```cpp
+uword stack_ptr = Isolate::GetCurrentStackPointer();
+```
+
+<Note>
+This calls a pregenerated stub to bypass ASan's instrumentation.
+</Note>
+
+## Testing Precompilation
+
+### Standard Precompilation
+
+```bash
+./tools/build.py -mrelease runtime_precompiled
+./tools/test.py -mrelease -cprecompiler -rdart_precompiled
+```
+
+### Precompilation on Android
+
+<Steps>
+  <Step title="Build for Android">
+    ```bash
+    ./tools/build.py -mrelease -aarm --os=android runtime_precompiled
+    ```
+  </Step>
+  
+  <Step title="Add ADB to PATH">
+    ```bash
+    export PATH=$PATH:$PWD/third_party/android_tools/sdk/platform-tools
+    ```
+  </Step>
+  
+  <Step title="Run tests on device">
+    ```bash
+    ./tools/test.py -mrelease -aarm --system=android \
+      -cprecompiler -rdart_precompiled --use-blobs
+    ```
+  </Step>
+</Steps>
+
+## Quick Minimal Tests
+
+For rapid iteration during development, use these minimal test commands:
+
+### macOS
+
+```bash
+./tools/build.py -mrelease dart2js
+./sdk/bin/dart2js_developer -v --categories=all \
+  --package-root=out/ReleaseIA32/packages/ \
+  tests/utils/dummy_compiler_test.dart
+```
+
+### Linux
+
+```bash
+./tools/build.py -mrelease dart2js
+./sdk/bin/dart2js_developer -v --categories=all \
+  --package-root=out/ReleaseIA32/packages/ \
+  tests/utils/dummy_compiler_test.dart
+```
+
+### Windows
+
+```bash
+python ./tools/build.py -mrelease dart2js
+sdk\bin\dart2js_developer.bat -v --categories=all \
+  --package-root=out/ReleaseIA32/packages/ \
+  tests/utils/dummy_compiler_test.dart
+```
+
+<Warning>
+Minimal tests are quick but may miss issues. Always run full test suites before submitting.
+</Warning>

@@ -1,0 +1,146 @@
+---
+title: Branches and Releases
+description: Understanding the Dart SDK branch structure and release cycle
+---
+
+The Dart SDK uses a simple branch structure for development and releases. Features are developed on the main branch and hidden behind flags until ready. The SDK has four primary release channels, each serving a specific purpose in the release lifecycle.
+
+## Branch Structure
+
+The Dart project maintains four main branches:
+
+### main
+
+Used for everyday development. All CLs (changelists) should be landed here.
+
+- **Purpose**: Active development
+- **Activity**: All feature development and bug fixes
+- **FLAGS**: Unreleased features are hidden behind flags
+- **View**: [main branch VERSION](https://github.com/dart-lang/sdk/blob/main/tools/VERSION)
+
+### dev
+
+Populated from the main branch via full pushes, typically twice a week.
+
+- **Purpose**: Early testing of main branch changes
+- **Activity**: Full merges from main on green builds
+- **Cherry-picks**: Only in emergencies
+- **Releases**: [dev channel builds](https://dart.dev/tools/sdk/archive#dev-channel)
+- **View**: [dev branch VERSION](https://github.com/dart-lang/sdk/blob/dev/tools/VERSION)
+
+<Warning>
+Don't land CLs directly to dev. Changes flow from main via full pushes.
+</Warning>
+
+### beta
+
+Populated from the dev branch via full pushes (monthly) or cherry-picks during stabilization.
+
+- **Purpose**: Release candidate stabilization
+- **Activity**: Full pushes from dev or cherry-picks during cherry-pick season
+- **Cherry-picks**: Critical fixes during stabilization period
+- **Releases**: [beta channel builds](https://dart.dev/tools/sdk/archive#beta-channel)
+- **View**: [beta branch VERSION](https://github.com/dart-lang/sdk/blob/beta/tools/VERSION)
+
+<Warning>
+Don't land CLs directly to beta. Changes flow from dev or via cherry-picks.
+</Warning>
+
+### stable
+
+The main release branch, populated from beta when a release is ready.
+
+- **Purpose**: Production releases
+- **Activity**: Full pushes from beta or cherry-picks for patches
+- **Cherry-picks**: Security, crash, and critical bug fixes
+- **Releases**: [stable channel builds](https://dart.dev/tools/sdk/archive#stable-channel)
+- **View**: [stable branch VERSION](https://github.com/dart-lang/sdk/blob/stable/tools/VERSION)
+
+<Warning>
+Don't land CLs directly to stable. Changes flow from beta or via cherry-picks.
+</Warning>
+
+## Release Cycle
+
+The normal release cycle is approximately 2 months long, though timing may vary based on stability:
+
+- **Early if**: Stability metrics are excellent
+- **Late if**: Additional stabilization is needed
+- **Feature-driven exceptions**: Larger language changes may shift timelines to ensure tool synchronization
+
+### Development Phase (6-7 weeks)
+
+<Steps>
+  <Step title="Continuous development">
+    Development continues on main branch throughout the entire cycle.
+  </Step>
+  
+  <Step title="Regular dev releases">
+    Full merges from main to dev occur roughly twice a week on green builds.
+    
+    Quick bug fixes may trigger additional full pushes.
+  </Step>
+  
+  <Step title="Parallel work">
+    Teams continue landing features and fixes on main while dev releases are published.
+  </Step>
+</Steps>
+
+### Cherry-Pick Season (2 weeks)
+
+The final 2 weeks focus on stabilizing the beta channel for release.
+
+<Steps>
+  <Step title="Beta initialization">
+    Full push of the latest dev release to beta channel.
+  </Step>
+  
+  <Step title="Critical fixes only">
+    Only critical fixes are cherry-picked to beta. See [Cherry-Picks](/contributing/cherry-picks) for the process.
+  </Step>
+  
+  <Step title="Multiple batches">
+    Cherry-pick batches are merged and released multiple times per week.
+  </Step>
+  
+  <Step title="Ongoing development">
+    Main and dev channels continue normal operation during cherry-pick season.
+  </Step>
+</Steps>
+
+### Stable Release
+
+Once beta is sufficiently stable:
+
+<Steps>
+  <Step title="Merge to stable">
+    Beta is merged to stable branch.
+  </Step>
+  
+  <Step title="Release publication">
+    Stable release is published to all channels.
+  </Step>
+  
+  <Step title="Patch releases">
+    Throughout the 2-month cycle, patch releases address security issues, crashes, and critical bugs on the current stable version.
+  </Step>
+</Steps>
+
+## Getting Changes to Beta
+
+During cherry-pick season, critical fixes can be backported to beta. See the [Cherry-Pick Process](/contributing/cherry-picks) for detailed instructions on:
+
+- Determining if a fix qualifies for cherry-picking
+- Creating and formatting cherry-pick CLs
+- Getting approval and submitting changes
+
+## Timeline Summary
+
+```
+Week 1-6:  Main → Dev (2x/week) | Development phase
+Week 7:    Dev → Beta (full push) | Cherry-pick season begins
+Week 7-8:  Critical fixes cherry-picked to beta (multiple batches/week)
+Week 8:    Beta → Stable | Release published
+```
+
+Throughout all 8 weeks, main continues active development and dev releases continue publishing.

@@ -1,0 +1,494 @@
+---
+title: "Intermediate Language Instructions"
+description: "Comprehensive reference for Dart VM IL instruction types and their roles in the compiler"
+---
+
+The Dart VM compiler uses an Intermediate Language (IL) to represent programs during compilation. IL instructions are defined in `runtime/vm/compiler/backend/il.h` and form the core of the compiler's optimization pipeline.
+
+## IL Instruction Hierarchy
+
+Instructions are organized into concrete and abstract classes:
+
+- **Concrete Instructions**: Directly instantiable instruction types
+- **Abstract Instructions**: Base classes providing common functionality
+
+### Instruction Attributes
+
+Each instruction can have the following attributes:
+
+- `kNoGC`: Guaranteed not to trigger garbage collection on non-exceptional paths
+- Default (`_`): May trigger GC depending on runtime conditions
+
+## Block Entry Instructions
+
+Block entry instructions define the entry points for basic blocks in the control flow graph.
+
+<Accordion title="GraphEntry">
+  **Attributes**: kNoGC
+  
+  The root entry point of a flow graph. Every flow graph has exactly one GraphEntry that serves as the starting point for execution.
+  
+  ```cpp
+  class GraphEntryInstr : public BlockEntry {
+    // Entry point for the entire function
+  };
+  ```
+</Accordion>
+
+<Accordion title="FunctionEntry">
+  **Attributes**: kNoGC
+  
+  Entry point for normal function calls. Handles function prologue and parameter setup.
+</Accordion>
+
+<Accordion title="TargetEntry">
+  **Attributes**: kNoGC
+  
+  Entry point for a basic block that has a single predecessor. Used for simple control flow paths.
+</Accordion>
+
+<Accordion title="JoinEntry">
+  **Attributes**: kNoGC
+  
+  Entry point for a basic block with multiple predecessors. Contains Phi instructions to merge values from different control flow paths.
+</Accordion>
+
+<Accordion title="TryEntry">
+  **Attributes**: kNoGC
+  
+  Entry point for a try block in exception handling.
+</Accordion>
+
+<Accordion title="CatchBlockEntry">
+  **Attributes**: kNoGC
+  
+  Entry point for a catch block that handles exceptions.
+</Accordion>
+
+<Accordion title="OsrEntry">
+  **Attributes**: kNoGC
+  
+  Entry point for On-Stack Replacement (OSR), allowing optimized code to replace unoptimized code during execution.
+</Accordion>
+
+<Accordion title="NativeEntry & IndirectEntry">
+  **Attributes**: kNoGC
+  
+  Special entry points for native calls and indirect control flow.
+</Accordion>
+
+## Control Flow Instructions
+
+Instructions that affect program control flow.
+
+<Accordion title="Goto">
+  **Attributes**: kNoGC
+  
+  Unconditional jump to a target block.
+  
+  ```dart
+  // Example flow:
+  // Block A
+  //   Goto Block B
+  ```
+</Accordion>
+
+<Accordion title="Branch">
+  **Attributes**: kNoGC
+  
+  Conditional branch based on a comparison instruction. Has two successors: true and false targets.
+  
+  ```dart
+  // if (x < 10) { ... } else { ... }
+  // Compiles to:
+  //   Branch(x < 10) -> true_block, false_block
+  ```
+</Accordion>
+
+<Accordion title="IndirectGoto">
+  **Attributes**: kNoGC
+  
+  Jump to a dynamically computed target. Used for switch statements and other computed control flow.
+</Accordion>
+
+## Value and Data Instructions
+
+<Accordion title="Phi">
+  **Attributes**: kNoGC
+  
+  SSA phi instruction that merges values from different control flow paths at join points.
+  
+  ```cpp
+  // At a join point:
+  // v3 = Phi(v1 from predecessor1, v2 from predecessor2)
+  ```
+</Accordion>
+
+<Accordion title="Parameter & NativeParameter">
+  **Attributes**: kNoGC
+  
+  Represents function parameters. NativeParameter is used for FFI native function calls.
+</Accordion>
+
+<Accordion title="Constant">
+  **Attributes**: kNoGC
+  
+  Represents a compile-time constant value.
+</Accordion>
+
+<Accordion title="UnboxedConstant">
+  **Attributes**: kNoGC
+  
+  Represents an unboxed constant value (integer, double, etc.) for better performance.
+</Accordion>
+
+<Accordion title="LoadLocal & StoreLocal">
+  **Attributes**: kNoGC
+  
+  Load from and store to local variables.
+  
+  ```dart
+  var x = 10;  // StoreLocal
+  print(x);    // LoadLocal
+  ```
+</Accordion>
+
+## Arithmetic Instructions
+
+<Accordion title="BinarySmiOp">
+  **Attributes**: kNoGC
+  
+  Binary operations on Small Integers (Smi): addition, subtraction, multiplication, etc.
+  
+  Supported operations:
+  - `+`, `-`, `*`, `~/`, `%`
+  - `&`, `|`, `^`
+  - `<<`, `>>`
+</Accordion>
+
+<Accordion title="BinaryInt32Op & BinaryInt64Op">
+  **Attributes**: kNoGC
+  
+  Binary operations on 32-bit and 64-bit integers.
+</Accordion>
+
+<Accordion title="BinaryDoubleOp">
+  **Attributes**: kNoGC
+  
+  Binary operations on double-precision floating point values.
+  
+  ```dart
+  double result = a + b;  // BinaryDoubleOp(+)
+  ```
+</Accordion>
+
+<Accordion title="UnaryInt64Op & UnarySmiOp">
+  **Attributes**: kNoGC
+  
+  Unary operations like negation and bitwise NOT.
+</Accordion>
+
+## Type Conversion Instructions
+
+<Accordion title="Box & Unbox">
+  **Box Attributes**: May trigger GC (allocation)
+  **Unbox Attributes**: kNoGC
+  
+  Convert between boxed (heap-allocated) and unboxed (register/stack) representations.
+  
+  - `BoxInt64`: Box a 64-bit integer
+  - `UnboxInt64`: Unbox to 64-bit integer
+  - `BoxInt32`: Box a 32-bit integer
+  - `UnboxInt32`: Unbox to 32-bit integer
+  - `BoxUint32`: Box an unsigned 32-bit integer
+  - `UnboxUint32`: Unbox to unsigned 32-bit integer
+</Accordion>
+
+<Accordion title="SmiToDouble">
+  **Attributes**: kNoGC
+  
+  Convert Smi to double-precision floating point.
+</Accordion>
+
+<Accordion title="DoubleToInteger & DoubleToSmi">
+  **DoubleToInteger Attributes**: May trigger GC
+  **DoubleToSmi Attributes**: kNoGC
+  
+  Convert double to integer types.
+</Accordion>
+
+<Accordion title="Int32ToDouble & Int64ToDouble">
+  **Attributes**: kNoGC
+  
+  Convert integer types to double.
+</Accordion>
+
+<Accordion title="IntConverter">
+  **Attributes**: kNoGC
+  
+  Convert between different integer representations (sign extension, truncation, etc.).
+</Accordion>
+
+## Memory Access Instructions
+
+<Accordion title="LoadField">
+  **Attributes**: May trigger GC (lazy initialization)
+  
+  Load a field from an object.
+  
+  ```dart
+  var value = obj.field;  // LoadField
+  ```
+</Accordion>
+
+<Accordion title="StoreField">
+  **Attributes**: May trigger GC (write barrier)
+  
+  Store a value to an object field. May trigger write barriers for garbage collection.
+</Accordion>
+
+<Accordion title="LoadStaticField & StoreStaticField">
+  Load/store static (class-level) fields.
+</Accordion>
+
+<Accordion title="LoadIndexed & StoreIndexed">
+  **Attributes**: kNoGC
+  
+  Array element access with bounds checking.
+  
+  ```dart
+  var elem = array[i];  // LoadIndexed
+  array[i] = value;     // StoreIndexed
+  ```
+</Accordion>
+
+<Accordion title="LoadUntagged">
+  **Attributes**: kNoGC
+  
+  Load an untagged (raw pointer) value from memory. Used for low-level operations.
+</Accordion>
+
+## Call Instructions
+
+<Accordion title="StaticCall">
+  **Attributes**: May trigger GC
+  
+  Direct call to a statically-known function.
+  
+  ```dart
+  staticFunction(arg1, arg2);  // StaticCall
+  ```
+</Accordion>
+
+<Accordion title="InstanceCall">
+  **Attributes**: May trigger GC
+  
+  Dynamic method call on an instance. Uses inline caches for optimization.
+  
+  ```dart
+  obj.method(arg);  // InstanceCall
+  ```
+</Accordion>
+
+<Accordion title="PolymorphicInstanceCall">
+  **Attributes**: May trigger GC
+  
+  Optimized polymorphic call that handles multiple receiver types efficiently.
+</Accordion>
+
+<Accordion title="ClosureCall">
+  **Attributes**: May trigger GC
+  
+  Call through a closure (function object).
+  
+  ```dart
+  var fn = () => print('hello');
+  fn();  // ClosureCall
+  ```
+</Accordion>
+
+<Accordion title="FfiCall">
+  **Attributes**: May trigger GC
+  
+  Foreign Function Interface call to native code.
+</Accordion>
+
+## Allocation Instructions
+
+<Accordion title="AllocateObject">
+  **Attributes**: May trigger GC
+  
+  Allocate a new object instance.
+  
+  ```dart
+  var obj = MyClass();  // AllocateObject
+  ```
+</Accordion>
+
+<Accordion title="CreateArray">
+  **Attributes**: May trigger GC
+  
+  Create a new array with a specified length.
+</Accordion>
+
+<Accordion title="AllocateClosure">
+  **Attributes**: May trigger GC
+  
+  Allocate a closure object.
+</Accordion>
+
+<Accordion title="AllocateRecord & AllocateSmallRecord">
+  **Attributes**: May trigger GC
+  
+  Allocate record instances (Dart 3.0+ feature).
+</Accordion>
+
+<Accordion title="AllocateContext">
+  **Attributes**: May trigger GC
+  
+  Allocate a context for closure variable capture.
+</Accordion>
+
+## Check and Guard Instructions
+
+<Accordion title="CheckSmi">
+  **Attributes**: kNoGC
+  
+  Runtime check that a value is a Smi. Deoptimizes if false.
+</Accordion>
+
+<Accordion title="CheckClass & CheckClassId">
+  **Attributes**: kNoGC
+  
+  Verify object class. Used for type specialization.
+</Accordion>
+
+<Accordion title="CheckNull">
+  **Attributes**: kNoGC
+  
+  Verify value is not null. Throws if null.
+</Accordion>
+
+<Accordion title="CheckArrayBound">
+  **Attributes**: kNoGC
+  
+  Bounds check for array access. Throws on out-of-bounds.
+  
+  ```dart
+  array[index];  // CheckArrayBound(index, array.length)
+  ```
+</Accordion>
+
+<Accordion title="CheckStackOverflow">
+  **Attributes**: May trigger GC
+  
+  Check for stack overflow. Allows runtime to handle deep recursion.
+</Accordion>
+
+<Accordion title="GuardFieldClass & GuardFieldLength">
+  **Attributes**: May trigger GC
+  
+  Guard instructions for field type and length tracking.
+</Accordion>
+
+## Comparison Instructions
+
+<Accordion title="StrictCompare">
+  **Attributes**: kNoGC
+  
+  Strict equality comparison (identical).
+  
+  ```dart
+  if (a === b) { }  // StrictCompare
+  ```
+</Accordion>
+
+<Accordion title="EqualityCompare">
+  **Attributes**: kNoGC
+  
+  Equality comparison using `==` operator.
+</Accordion>
+
+<Accordion title="RelationalOp">
+  **Attributes**: kNoGC
+  
+  Relational comparisons: `<`, `<=`, `>`, `>=`
+</Accordion>
+
+<Accordion title="TestCids">
+  **Attributes**: kNoGC
+  
+  Test if object's class ID is in a specified set.
+</Accordion>
+
+## Return Instructions
+
+<Accordion title="DartReturn">
+  **Attributes**: kNoGC
+  
+  Return from a Dart function.
+</Accordion>
+
+<Accordion title="NativeReturn">
+  **Attributes**: kNoGC
+  
+  Return from a native function.
+</Accordion>
+
+## Exception Handling
+
+<Accordion title="Throw">
+  **Attributes**: kNoGC
+  
+  Throw an exception.
+  
+  ```dart
+  throw Exception('error');  // Throw
+  ```
+</Accordion>
+
+<Accordion title="ReThrow">
+  **Attributes**: kNoGC
+  
+  Re-throw a caught exception.
+</Accordion>
+
+## Special Instructions
+
+<Accordion title="Deoptimize">
+  **Attributes**: kNoGC
+  
+  Trigger deoptimization, returning to unoptimized code.
+</Accordion>
+
+<Accordion title="Redefinition">
+  **Attributes**: kNoGC
+  
+  SSA instruction to refine type information without changing the value.
+</Accordion>
+
+<Accordion title="MaterializeObject">
+  **Attributes**: May trigger GC
+  
+  Materialize an object that was allocation-sunk during optimization.
+</Accordion>
+
+<Accordion title="SimdOp">
+  **Attributes**: kNoGC
+  
+  SIMD (Single Instruction Multiple Data) operations for vectorized computation.
+</Accordion>
+
+## Instruction Source Location
+
+All instructions can be associated with source code positions via `runtime/vm/compiler/backend/il.h:1002`:
+
+```cpp
+virtual TokenPosition token_pos() const;
+InstructionSource source() const;
+```
+
+This enables:
+- Precise error reporting
+- Debugging information
+- Profiling data correlation

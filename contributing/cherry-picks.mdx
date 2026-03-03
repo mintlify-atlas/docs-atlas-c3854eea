@@ -1,0 +1,283 @@
+---
+title: Cherry-Picks to Release Channels
+description: How to cherry-pick bug fixes to beta and stable release branches
+---
+
+Cherry-picking is the process of selecting and merging an existing bug fix from the main development branch into a release branch (beta or stable) for inclusion in the next hotfix release.
+
+<Info>
+This process applies only to bugs and regressions. Feature work is not considered for cherry-picking and must wait for the next regular release.
+</Info>
+
+## When to Cherry-Pick
+
+Before creating a cherry-pick, verify that:
+
+1. The fix has landed on the main branch with tests
+2. The issue exists in the target release channel (beta or stable)
+3. The severity justifies backporting (see priority guidelines)
+4. You may need separate cherry-picks for beta and stable if both are affected
+
+## Cherry-Pick Process
+
+### Step 1: Create Cherry-Pick Branch
+
+<Steps>
+  <Step title="Fetch latest changes">
+    ```bash
+    git fetch
+    ```
+  </Step>
+  
+  <Step title="Create branch targeting the release channel">
+    For stable:
+    ```bash
+    git new-branch --upstream origin/stable cherry
+    ```
+    
+    For beta:
+    ```bash
+    git new-branch --upstream origin/beta cherry
+    ```
+  </Step>
+  
+  <Step title="Cherry-pick the commit">
+    ```bash
+    git cherry-pick --edit $commit
+    ```
+  </Step>
+</Steps>
+
+### Step 2: Update Commit Message
+
+Modify the commit message with the following changes:
+
+<Steps>
+  <Step title="Add channel hashtag">
+    Add `[beta]` or `[stable]` at the start of the first line.
+  </Step>
+  
+  <Step title="Link to original CL">
+    Rename the `Reviewed-on` field to `Cherry-pick` to link to the original changelist.
+  </Step>
+  
+  <Step title="Remove conflicting fields">
+    Delete these fields that don't apply to the cherry-pick:
+    - `Change-id`
+    - `Commit-queue`
+    - `Reviewed-by`
+  </Step>
+  
+  <Step title="Fill out description">
+    Include the following information:
+    
+    - **Issue description**: Brief description of the issue and affected platforms
+    - **What is the fix**: Brief description of the solution
+    - **Why cherry-pick**: Explain impact, affected users, and justification
+    - **Risk**: Describe risks associated with this cherry-pick
+    - **Issue link(s)**: Links to original GitHub issues
+  </Step>
+</Steps>
+
+### Commit Message Example
+
+```
+[stable] Fix foo crash.
+
+Issue description: When attempting to use foo under certain conditions, 
+users are unable to compile.
+
+What is the fix: foo is now evaluated at runtime.
+
+Why cherry-pick: Users of foo are no longer able to compile to bar.
+
+Risk: Low, this fix has landed on the main channel and is tested on 
+the same infrastructure.
+
+Issue link(s): https://github.com/dart-lang/sdk/issues/12345678
+
+Cherry-pick: https://dart-review.googlesource.com/c/sdk/+/12345678
+```
+
+### Step 3: Update CHANGELOG (Stable Only)
+
+Stable cherry-picks must have CHANGELOG.md entries. Beta releases don't require changelog entries.
+
+<Steps>
+  <Step title="Edit CHANGELOG.md">
+    ```bash
+    $EDITOR CHANGELOG.md
+    ```
+  </Step>
+  
+  <Step title="Add or update section">
+    If no section exists for the next patch version, create one with an incremented patch number (e.g., `3.0.4` → `3.0.5`) without a date.
+    
+    <Warning>
+    Don't modify sections that have a release date - they've already been published.
+    </Warning>
+  </Step>
+  
+  <Step title="Document the change">
+    ```markdown
+    ## 3.0.5
+    
+    This is a patch release that:
+    
+    - Fixes all bugs in the Dart SDK (issue [#123456])
+    
+    [#123456]: https://dart-review.googlesource.com/c/sdk/+/123456
+    
+    ## 3.0.4
+    **Released on:** 2025-01-08
+    
+    This is a patch release that:
+    
+    ...
+    ```
+  </Step>
+</Steps>
+
+<Info>
+Infrastructure-only changes invisible to users can use the `Changelog-Exempt: ...` footer to skip the changelog requirement.
+</Info>
+
+### Step 4: Upload and Test
+
+<Steps>
+  <Step title="Upload to Gerrit">
+    ```bash
+    git cl upload
+    ```
+  </Step>
+  
+  <Step title="Run tests">
+    Trigger a commit queue dry run and add appropriate try builders to confirm the fix.
+  </Step>
+</Steps>
+
+### Step 5: Submit Cherry-Pick
+
+<Steps>
+  <Step title="Get approvals">
+    Obtain reviews from:
+    - Area subject matter expert
+    - Dart team lead
+  </Step>
+  
+  <Step title="Submit to commit queue">
+    The author submits to the commit queue. Tryjobs will compare test results with the previous commit on the target branch and fail if regressions are introduced.
+  </Step>
+  
+  <Step title="Force submit if necessary">
+    If regressions are unavoidable or try builders don't work on older code, bypass the commit queue:
+    
+    In Gerrit: `... -> Submit`
+  </Step>
+</Steps>
+
+## Cherry-Picking Dependencies
+
+If you need to cherry-pick a commit in a dependency (e.g., `third-party/pkg/pub`) to a release channel:
+
+### Find Current Dependency Revision
+
+```bash
+git checkout beta && git pull
+gclient getdep -r sdk/third_party/pkg/pub
+# Output: a3f8b2fd36ec432450caf907474a02023ef3e44e
+```
+
+### Create Cherry-Pick in Dependency
+
+<Steps>
+  <Step title="Create branch from current revision">
+    In the dependency repository:
+    ```bash
+    git checkout -b cherry-pick a3f8b2fd36ec432450caf907474a02023ef3e44e
+    ```
+  </Step>
+  
+  <Step title="Cherry-pick the commit">
+    ```bash
+    git cherry-pick $commit-to-cherry-pick
+    ```
+  </Step>
+  
+  <Step title="Push to origin">
+    ```bash
+    git push -u origin cherry_pick:cherry_pick
+    git rev-parse HEAD
+    # Output: 6d1857c84cfb8a014aefedaf2d453214bf5ddb96
+    ```
+  </Step>
+  
+  <Step title="Wait for mirror">
+    Wait for the change to mirror to [dart.googlesource.com](https://dart.googlesource.com/).
+  </Step>
+</Steps>
+
+### Merge Cherry-Pick to Protected Branch
+
+To prevent garbage collection, merge the cherry-picked commit into the main branch:
+
+```bash
+#!/bin/bash
+BRANCH="<name of branch to merge>"
+REPO="<name of repository>"
+
+# Defaults that may need to be changed
+TARGET_BRANCH="main" # sometimes repositories use different default branch
+ORG="dart-lang" # most dependencies are in dart-lang, but not all
+REMOTE=origin # use upstream if that is the target repo's remote
+
+# Clone the repo if needed
+gh repo clone "$ORG/$REPO"
+cd "$REPO"
+
+# Fetch and create tracking branch
+git fetch "$REMOTE"
+git switch -c "merge-$BRANCH" "$REMOTE/$TARGET_BRANCH"
+
+# Create merge commit
+git merge -sours "$REMOTE/$BRANCH"
+gh pr create
+```
+
+<Warning>
+When merging the PR, use "merge" instead of "squash" (you may need to temporarily change repo settings).
+</Warning>
+
+### Update SDK Dependency
+
+<Steps>
+  <Step title="Bump dependency in SDK">
+    ```bash
+    tools/manage_deps.dart bump third_party/pkg/pub --target=6d1857c84cfb8a014aefedaf2d453214bf5ddb96
+    ```
+  </Step>
+  
+  <Step title="Set upstream to release channel">
+    ```bash
+    git branch --set-upstream-to=origin/beta
+    ```
+  </Step>
+  
+  <Step title="Upload the change">
+    ```bash
+    git cl upload
+    ```
+    
+    This CL can now be used in the cherry-pick flow described above.
+  </Step>
+</Steps>
+
+## Priority Guidelines
+
+Cherry-picks are evaluated based on priority:
+
+- **P0**: Blocks the release, valid cherry-pick, worthy of dot release
+- **P1**: Planned for in-progress release, evaluated case-by-case
+- **P2-P3**: Typically wait for the next regular release
+
+During cherry-pick season for release X, only P0 issues are cherry-picked to that release.

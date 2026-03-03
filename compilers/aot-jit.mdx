@@ -1,0 +1,539 @@
+---
+title: AOT vs JIT Compilation
+description: Understanding Ahead-of-Time and Just-in-Time compilation in the Dart VM
+---
+
+The Dart VM supports both Just-in-Time (JIT) and Ahead-of-Time (AOT) compilation, each optimized for different use cases. Understanding the trade-offs between these compilation modes is essential for optimizing your application's performance.
+
+## Compilation Modes
+
+### Just-in-Time (JIT) Compilation
+
+JIT compilation compiles code to machine code **during runtime**. The Dart VM includes a sophisticated JIT compiler with adaptive optimization.
+
+**Key Features:**
+- Compiles functions when first called
+- Collects runtime profiling data
+- Recompiles hot functions with optimizations
+- Supports speculative optimization and deoptimization
+- Enables hot reload for development
+
+**Use Cases:**
+- Development and debugging
+- Server applications with long-running processes
+- Applications benefiting from adaptive optimization
+
+### Ahead-of-Time (AOT) Compilation
+
+AOT compilation compiles code to machine code **before execution**. This produces standalone native executables or snapshots.
+
+**Key Features:**
+- All code compiled upfront
+- No runtime compilation overhead
+- Global static analysis and optimization
+- Smaller runtime footprint (no compiler)
+- Predictable performance
+
+**Use Cases:**
+- Mobile applications (iOS, Android)
+- Desktop applications
+- Production deployments requiring fast startup
+- Platforms prohibiting JIT compilation
+
+## Performance Comparison
+
+<Tabs>
+  <Tab title="Startup Time">
+    **Winner: AOT**
+    
+    ```
+    ╭────────────────────────────────────────╮
+    │ Startup Time Comparison                │
+    ├────────────────────────────────────────┤
+    │ AOT:  ▓░░░░░░░░░░░  100ms             │
+    │ JIT:  ▓▓▓▓▓▓▓▓▓░░░  500ms             │
+    ╰────────────────────────────────────────╯
+    ```
+    
+    AOT starts faster because:
+    - No compilation during startup
+    - Code ready to execute immediately
+    - Smaller memory footprint
+  </Tab>
+  
+  <Tab title="Peak Performance">
+    **Winner: JIT (usually)**
+    
+    ```
+    ╭────────────────────────────────────────╮
+    │ Peak Performance After Warmup          │
+    ├────────────────────────────────────────┤
+    │ JIT:  ▓▓▓▓▓▓▓▓▓▓▓▓  100% (baseline)   │
+    │ AOT:  ▓▓▓▓▓▓▓▓▓▓░░   85% of JIT       │
+    ╰────────────────────────────────────────╯
+    ```
+    
+    JIT can be faster because:
+    - Optimizes for actual execution patterns
+    - Inlines based on runtime type information
+    - Speculative optimizations with deopt safety net
+  </Tab>
+  
+  <Tab title="Code Size">
+    **Winner: Depends**
+    
+    ```
+    ╭────────────────────────────────────────╮
+    │ Executable Size                        │
+    ├────────────────────────────────────────┤
+    │ AOT snapshot:    ▓▓▓▓░░  5-10 MB       │
+    │ JIT runtime:     ▓▓▓▓▓▓  15-20 MB      │
+    ╰────────────────────────────────────────╯
+    ```
+    
+    AOT snapshots are smaller because:
+    - No JIT compiler bundled
+    - Tree-shaking removes unused code
+    - But includes all reachable code upfront
+  </Tab>
+  
+  <Tab title="Warmup Time">
+    **Winner: AOT**
+    
+    ```
+    ╭────────────────────────────────────────╮
+    │ Time to Reach Peak Performance         │
+    ├────────────────────────────────────────┤
+    │ AOT:  ▓░░░░░░░░░░░  Instant           │
+    │ JIT:  ▓▓▓▓▓▓▓▓▓▓▓▓  Several seconds    │
+    ╰────────────────────────────────────────╯
+    ```
+    
+    AOT reaches peak immediately:
+    - All optimizations done ahead-of-time
+    - No profiling phase needed
+    - Consistent performance from start
+  </Tab>
+</Tabs>
+
+## How JIT Works
+
+### Compilation Pipeline
+
+```
+┌─────────────┐
+│ Dart Source │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────────────┐
+│ Common Front-End    │
+│ (Parsing, Typing)   │
+└──────┬──────────────┘
+       │
+       ▼
+┌─────────────────────┐
+│ Kernel AST          │
+└──────┬──────────────┘
+       │
+       ▼ (lazy)
+┌─────────────────────┐
+│ Unoptimized Code    │ ◄─── First call to function
+│ (Quick compile)     │
+└──────┬──────────────┘
+       │
+       │ Collect profiling
+       ▼ data (ICs, counters)
+┌─────────────────────┐
+│ Optimized Code      │ ◄─── After threshold reached
+│ (Background thread) │
+└─────────────────────┘
+```
+
+### Adaptive Optimization
+
+1. **Unoptimized Compilation** - Fast compilation when function first called
+2. **Profiling** - Collect type feedback via inline caches
+3. **Optimization** - Compile hot functions with speculative optimizations
+4. **Deoptimization** - Fall back to unoptimized code if assumptions violated
+
+Example:
+
+```dart
+void process(dynamic obj) {
+  print(obj.toString());
+}
+
+// Initially called with Dogs
+for (var i = 0; i < 10000; i++) {
+  process(Dog());
+}
+// JIT optimizes: assumes obj is always Dog
+// Inlines Dog.toString()
+
+// Later called with Cat
+process(Cat());
+// Deoptimizes: assumption violated
+// Falls back to unoptimized code
+// Later reoptimizes with new profile
+```
+
+### Inline Caching
+
+JIT tracks receiver types at call sites:
+
+```dart
+class Dog {
+  String get sound => 'woof';
+}
+
+class Cat {
+  String get sound => 'meow';
+}
+
+void main() {
+  final animals = <dynamic>[Dog(), Dog(), Cat()];
+  
+  for (var animal in animals) {
+    print(animal.sound); // Inline cache here
+  }
+}
+```
+
+Inline cache structure:
+
+```
+ICData for animal.sound:
+┌──────────────────────────────────┐
+│ Class    │ Method        │ Count │
+├──────────┼───────────────┼───────┤
+│ Dog      │ Dog.get:sound │ 2     │
+│ Cat      │ Cat.get:sound │ 1     │
+└──────────┴───────────────┴───────┘
+```
+
+## How AOT Works
+
+### Compilation Pipeline
+
+```
+┌─────────────┐
+│ Dart Source │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────────────┐
+│ Common Front-End    │
+│ (Parsing, Typing)   │
+└──────┬──────────────┘
+       │
+       ▼
+┌─────────────────────┐
+│ Kernel AST          │
+│ (Whole Program)     │
+└──────┬──────────────┘
+       │
+       ▼
+┌─────────────────────┐
+│ Type Flow Analysis  │ ◄─── Global analysis
+│ (TFA)               │      Find reachable code
+└──────┬──────────────┘      Propagate types
+       │
+       ▼
+┌─────────────────────┐
+│ Optimized IL        │
+│ (SSA Form)          │
+└──────┬──────────────┘
+       │
+       ▼
+┌─────────────────────┐
+│ Machine Code        │
+│ (All Functions)     │
+└──────┬──────────────┘
+       │
+       ▼
+┌─────────────────────┐
+│ AOT Snapshot        │
+│ (Executable)        │
+└─────────────────────┘
+```
+
+### Type Flow Analysis (TFA)
+
+AOT uses global static analysis to determine:
+
+- Which functions are reachable from `main()`
+- Which classes are instantiated
+- How types flow through the program
+
+Example:
+
+```dart
+abstract class Animal {
+  void makeSound();
+}
+
+class Dog extends Animal {
+  void makeSound() => print('woof');
+}
+
+class Cat extends Animal {
+  void makeSound() => print('meow');
+  void purr() => print('purr');
+}
+
+void main() {
+  final animal = Dog();
+  animal.makeSound();
+}
+```
+
+TFA determines:
+- `Cat` is never instantiated → exclude from snapshot
+- `Cat.purr` is unreachable → exclude from snapshot  
+- `animal.makeSound()` always calls `Dog.makeSound` → devirtualize
+
+## Optimization Levels
+
+Both AOT and JIT support optimization levels:
+
+<Tabs>
+  <Tab title="O0 - Unoptimized">
+    **Debug builds:**
+    
+    ```bash
+    # JIT (default in debug mode)
+    dart --optimization-level=0 app.dart
+    
+    # AOT
+    dart compile exe --optimization-level=0 -o app app.dart
+    ```
+    
+    - Fast compilation
+    - No optimizations
+    - Best for debugging
+    - Largest code size
+  </Tab>
+  
+  <Tab title="O1 - Size Optimized">
+    **Minimize binary size:**
+    
+    ```bash
+    dart compile exe --optimization-level=1 -o app app.dart
+    ```
+    
+    - Skip optimizations that increase size
+    - Smaller binaries than O2
+    - May sacrifice some performance
+  </Tab>
+  
+  <Tab title="O2 - Balanced (Default)">
+    **Production builds:**
+    
+    ```bash
+    dart compile exe -o app app.dart
+    ```
+    
+    - Balance speed and size
+    - Recommended for production
+    - Standard optimizations enabled
+  </Tab>
+  
+  <Tab title="O3 - Speed Optimized">
+    **Maximum performance:**
+    
+    ```bash
+    dart compile exe --optimization-level=3 -o app app.dart
+    ```
+    
+    - Aggressive optimizations
+    - May increase binary size
+    - Longer compilation time
+    - Best peak performance
+  </Tab>
+</Tabs>
+
+## Snapshots
+
+Both JIT and AOT use snapshots to serialize VM state:
+
+### AppJIT Snapshots
+
+JIT snapshots include compiled code and heap state:
+
+```bash
+# Create AppJIT snapshot
+dart --snapshot-kind=app-jit \
+     --snapshot=app.snapshot \
+     app.dart
+
+# Run from snapshot
+dart app.snapshot
+```
+
+**Benefits:**
+- Skip compilation warmup
+- Faster startup than pure JIT
+- Can still JIT compile new code
+
+**Use case:** Server applications with predictable workloads
+
+### AppAOT Snapshots
+
+AOT snapshots contain pre-compiled machine code:
+
+```bash
+# Create AOT snapshot
+dart compile aot-snapshot -o app.aot app.dart
+
+# Run with precompiled runtime
+dartaotruntime app.aot
+```
+
+**Benefits:**
+- Fastest startup
+- No JIT compiler needed
+- Smallest runtime
+
+**Use case:** Mobile apps, embedded systems
+
+## Choosing Between JIT and AOT
+
+### Use JIT When:
+
+- **Development** - Hot reload, fast iteration
+- **Long-running servers** - Adaptive optimization benefits
+- **Unpredictable workloads** - JIT adapts to actual usage
+- **Peak performance critical** - JIT often faster after warmup
+
+### Use AOT When:
+
+- **Mobile apps** - Fast startup, iOS requirement
+- **Fast startup required** - No warmup period
+- **Predictable workloads** - Static analysis effective  
+- **Small runtime needed** - No JIT compiler overhead
+- **Consistent performance** - No warmup variance
+
+## Command Line Usage
+
+### JIT Mode
+
+```bash
+# Run directly (JIT)
+dart run app.dart
+
+# Create AppJIT snapshot
+dart --snapshot-kind=app-jit --snapshot=app.jit app.dart
+dart app.jit
+```
+
+### AOT Mode
+
+```bash
+# Create executable (AOT)
+dart compile exe -o app app.dart
+./app
+
+# Create AOT snapshot
+dart compile aot-snapshot -o app.aot app.dart
+dartaotruntime app.aot
+```
+
+## Debugging Compilation
+
+### JIT Debugging
+
+Inspect JIT compilation:
+
+```bash
+# Print optimized IL
+dart --print-flow-graph-optimized \
+     --print-flow-graph-filter=myFunction \
+     app.dart
+
+# Disassemble generated code
+dart --disassemble-optimized \
+     --print-flow-graph-filter=myFunction \
+     app.dart
+
+# Trace deoptimizations
+dart --trace-deoptimization app.dart
+```
+
+### AOT Debugging
+
+Analyze AOT compilation:
+
+```bash
+# Print compilation phases
+dart compile exe --verbose -o app app.dart
+
+# Analyze binary size
+dart compile exe \
+     --extra-gen-snapshot-options=--print-instructions-sizes-to=sizes.json \
+     -o app app.dart
+```
+
+## Performance Tips
+
+### For JIT
+
+1. **Warmup** - Allow time for optimization:
+   ```dart
+   // Run critical code paths during warmup
+   void warmup() {
+     for (var i = 0; i < 10000; i++) {
+       criticalFunction();
+     }
+   }
+   ```
+
+2. **Avoid polymorphism in hot paths:**
+   ```dart
+   // Bad: polymorphic call site
+   void process(Animal animal) {
+     animal.makeSound(); // Multiple targets
+   }
+   
+   // Better: monomorphic
+   void processDog(Dog dog) {
+     dog.makeSound(); // Single target, can inline
+   }
+   ```
+
+3. **Use AppJIT for servers:**
+   ```bash
+   # Train with realistic workload
+   dart --snapshot-kind=app-jit --snapshot=server.jit server.dart
+   ```
+
+### For AOT
+
+1. **Help tree-shaking:**
+   ```dart
+   // Bad: keeps everything
+   import 'package:huge/huge.dart';
+   
+   // Good: import only needed parts
+   import 'package:huge/specific.dart';
+   ```
+
+2. **Use final and const:**
+   ```dart
+   // Helps TFA determine concrete types
+   final Dog dog = Dog(); // TFA knows exact type
+   Animal animal = Dog(); // TFA must consider subclasses
+   ```
+
+3. **Avoid reflection:**
+   ```dart
+   // dart:mirrors not supported in AOT
+   // Use code generation instead
+   ```
+
+## Related Resources
+
+- [Dart VM architecture](https://github.com/dart-lang/sdk/blob/main/runtime/docs/README.md)
+- [Optimization levels design doc](https://github.com/dart-lang/sdk/blob/main/runtime/docs/compiler/optimization_levels.md)
+- [Flutter performance profiling](https://docs.flutter.dev/perf/ui-performance)
+- [Dart runtime overview](https://dart.dev/overview#runtime)

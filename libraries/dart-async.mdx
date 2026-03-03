@@ -1,0 +1,528 @@
+---
+title: dart:async
+description: Asynchronous programming with Future, Stream, and async/await
+---
+
+The `dart:async` library provides support for asynchronous programming with classes such as Future and Stream. These are the fundamental building blocks of asynchronous programming in Dart.
+
+## Overview
+
+To use this library in your code:
+
+```dart
+import 'dart:async';
+```
+
+The dart:async library includes:
+- `Future` - Single asynchronous computation result
+- `Stream` - Sequence of asynchronous events
+- `async`/`await` - Language-level async support
+- `Timer` - Scheduled execution
+- `Zone` - Execution contexts for async code
+
+## Future
+
+### Overview
+
+<ParamField path="Future<T>" type="abstract class">
+  Represents the result of an asynchronous computation. A Future object represents a computation whose return value might not yet be available.
+</ParamField>
+
+### Creating Futures
+
+```dart
+// Using async function (recommended)
+Future<String> fetchUserName() async {
+  // Simulate network delay
+  await Future.delayed(Duration(seconds: 2));
+  return 'John Doe';
+}
+
+// Using Future constructor
+var future = Future<int>(() {
+  return expensiveComputation();
+});
+
+// Immediate values
+var immediate = Future.value(42);
+var error = Future.error(Exception('Failed'));
+
+// Delayed execution
+var delayed = Future.delayed(
+  Duration(seconds: 2),
+  () => 'Done!',
+);
+```
+
+### Using async/await
+
+<Accordion title="async/await Pattern">
+
+```dart
+// Basic async function
+Future<bool> fileContains(String path, String needle) async {
+  var haystack = await File(path).readAsString();
+  return haystack.contains(needle);
+}
+
+// Sequential operations
+Future<void> processUser() async {
+  var user = await fetchUser();
+  var profile = await fetchProfile(user.id);
+  var posts = await fetchPosts(user.id);
+  print('User: $user, Posts: ${posts.length}');
+}
+
+// Parallel operations with Future.wait
+Future<void> loadDashboard() async {
+  var results = await Future.wait([
+    fetchUser(),
+    fetchPosts(),
+    fetchComments(),
+  ]);
+  
+  var user = results[0];
+  var posts = results[1];
+  var comments = results[2];
+}
+
+// Error handling
+Future<void> handleErrors() async {
+  try {
+    var data = await fetchData();
+    process(data);
+  } on NetworkException catch (e) {
+    print('Network error: $e');
+  } catch (e, stackTrace) {
+    print('Error: $e');
+    print('Stack trace: $stackTrace');
+  } finally {
+    cleanup();
+  }
+}
+```
+
+</Accordion>
+
+### Future Methods
+
+<Accordion title="Future API Details">
+
+<ParamField path="then<R>(FutureOr<R> onValue(T value))" type="method">
+  Registers a callback to be called when the future completes successfully.
+</ParamField>
+
+<ParamField path="catchError(Function onError)" type="method">
+  Handles errors from the future.
+</ParamField>
+
+<ParamField path="whenComplete(FutureOr action())" type="method">
+  Registers a callback to be called when the future completes, regardless of success or failure.
+</ParamField>
+
+```dart
+// Callback-based (older style)
+fetchUser()
+  .then((user) => print('User: $user'))
+  .catchError((error) => print('Error: $error'))
+  .whenComplete(() => print('Done'));
+
+// Chaining futures
+fetchUser()
+  .then((user) => fetchProfile(user.id))
+  .then((profile) => print('Profile: $profile'));
+
+// Timeout
+var result = await fetchData().timeout(
+  Duration(seconds: 5),
+  onTimeout: () => throw TimeoutException('Too slow'),
+);
+```
+
+Key static methods:
+- `Future.wait(List<Future>)` - Waits for multiple futures
+- `Future.any(Iterable<Future>)` - Returns first completed future
+- `Future.delayed(Duration)` - Creates delayed future
+- `Future.value(T)` - Creates completed future
+- `Future.error(Object)` - Creates failed future
+
+</Accordion>
+
+### Future Patterns
+
+```dart
+// Fire and forget (not recommended)
+fetchData();  // No await, result ignored
+
+// Wait for completion
+await fetchData();
+
+// Store future for later
+var future = fetchData();
+// ... do other work ...
+var result = await future;
+
+// Race condition - first to complete wins
+var winner = await Future.any([
+  fetchFromCache(),
+  fetchFromNetwork(),
+]);
+
+// All or nothing
+try {
+  var results = await Future.wait([
+    operation1(),
+    operation2(),
+    operation3(),
+  ]);
+} catch (e) {
+  // If any fails, all fail
+}
+```
+
+## Stream
+
+### Overview
+
+<ParamField path="Stream<T>" type="abstract class">
+  A source of asynchronous data events. Provides a way to receive a sequence of events over time.
+</ParamField>
+
+### Creating Streams
+
+```dart
+// Using async* generator
+Stream<int> countStream(int max) async* {
+  for (int i = 1; i <= max; i++) {
+    await Future.delayed(Duration(seconds: 1));
+    yield i;
+  }
+}
+
+// From iterable
+var stream = Stream.fromIterable([1, 2, 3, 4, 5]);
+
+// From future
+var futureStream = Stream.fromFuture(fetchData());
+
+// Periodic stream
+var periodic = Stream.periodic(
+  Duration(seconds: 1),
+  (count) => count,
+).take(10);
+
+// Using StreamController
+var controller = StreamController<String>();
+controller.sink.add('Hello');
+controller.sink.add('World');
+var stream = controller.stream;
+```
+
+### Consuming Streams
+
+<Accordion title="Stream Consumption Patterns">
+
+```dart
+// Using await for loop (recommended)
+Stream<int> stream = countStream(5);
+await for (var value in stream) {
+  print('Received: $value');
+}
+
+// Using listen
+var subscription = stream.listen(
+  (data) {
+    print('Data: $data');
+  },
+  onError: (error) {
+    print('Error: $error');
+  },
+  onDone: () {
+    print('Stream closed');
+  },
+  cancelOnError: false,
+);
+
+// Pause and resume
+subscription.pause();
+// ... later ...
+subscription.resume();
+
+// Cancel subscription
+await subscription.cancel();
+
+// Using forEach
+await stream.forEach((data) {
+  print('Data: $data');
+});
+
+// Convert to future
+var lastValue = await stream.last;
+var firstValue = await stream.first;
+var allValues = await stream.toList();
+```
+
+</Accordion>
+
+### Stream Transformations
+
+<Accordion title="Stream Transformation Methods">
+
+```dart
+// Map - transform each event
+var doubled = stream.map((n) => n * 2);
+
+// Where - filter events
+var evens = stream.where((n) => n.isEven);
+
+// Expand - one-to-many transformation
+var expanded = stream.expand((n) => [n, n]);
+
+// Take/Skip
+var firstThree = stream.take(3);
+var afterFive = stream.skip(5);
+var whileLessThan10 = stream.takeWhile((n) => n < 10);
+
+// Distinct - remove duplicates
+var unique = stream.distinct();
+
+// AsyncMap - async transformation
+var processed = stream.asyncMap((n) async {
+  await Future.delayed(Duration(milliseconds: 100));
+  return n * 2;
+});
+
+// Transform with StreamTransformer
+var transformer = StreamTransformer<int, String>.fromHandlers(
+  handleData: (value, sink) {
+    sink.add('Number: $value');
+  },
+);
+var transformed = stream.transform(transformer);
+```
+
+</Accordion>
+
+### Stream Types
+
+<Info>
+**Single-subscription streams** can only be listened to once. Examples: file I/O, HTTP requests.
+
+**Broadcast streams** can be listened to multiple times. Examples: UI events, WebSocket messages.
+</Info>
+
+```dart
+// Convert to broadcast stream
+var broadcast = stream.asBroadcastStream();
+
+// Multiple listeners
+broadcast.listen((data) => print('Listener 1: $data'));
+broadcast.listen((data) => print('Listener 2: $data'));
+
+// Check stream type
+if (stream.isBroadcast) {
+  print('This is a broadcast stream');
+}
+```
+
+### StreamController
+
+<ParamField path="StreamController<T>" type="class">
+  Creates and controls a stream. Provides a way to send data, error, and done events to a stream.
+</ParamField>
+
+```dart
+// Create controller
+var controller = StreamController<int>();
+
+// Add events
+controller.sink.add(1);
+controller.sink.add(2);
+controller.sink.addError(Exception('Error'));
+
+// Listen to stream
+controller.stream.listen(
+  (data) => print(data),
+  onError: (error) => print('Error: $error'),
+  onDone: () => print('Done'),
+);
+
+// Close when done
+await controller.close();
+
+// Broadcast controller
+var broadcastController = StreamController<int>.broadcast();
+```
+
+## Timer
+
+<ParamField path="Timer" type="class">
+  Schedules callbacks for future execution. Can be one-time or periodic.
+</ParamField>
+
+```dart
+// One-time timer
+Timer(Duration(seconds: 5), () {
+  print('5 seconds elapsed');
+});
+
+// Periodic timer
+var count = 0;
+var timer = Timer.periodic(Duration(seconds: 1), (timer) {
+  count++;
+  print('Tick $count');
+  
+  if (count >= 10) {
+    timer.cancel();
+  }
+});
+
+// Cancel timer
+timer.cancel();
+
+// Check if timer is active
+if (timer.isActive) {
+  print('Timer is running');
+}
+```
+
+## Zone
+
+<ParamField path="Zone" type="abstract class">
+  An execution context for asynchronous code. Zones can intercept errors, schedule tasks, and store values.
+</ParamField>
+
+```dart
+import 'dart:async';
+
+// Run code in a zone
+runZoned(() {
+  // This code runs in a custom zone
+  throw Exception('Error in zone');
+}, onError: (error, stackTrace) {
+  print('Caught error: $error');
+});
+
+// Zone with custom error handling
+runZonedGuarded(() async {
+  // App code here
+  await runApp();
+}, (error, stackTrace) {
+  // Global error handler
+  logError(error, stackTrace);
+});
+
+// Zone values
+var zone = Zone.current.fork(
+  zoneValues: {'requestId': '12345'},
+);
+
+zone.run(() {
+  var requestId = Zone.current['requestId'];
+  print('Request ID: $requestId');
+});
+```
+
+## Microtasks
+
+<ParamField path="scheduleMicrotask(void callback())" type="function">
+  Schedules a callback to run as a microtask. Microtasks run before the next event in the event queue.
+</ParamField>
+
+```dart
+print('1');
+scheduleMicrotask(() => print('3'));
+print('2');
+// Output: 1, 2, 3
+
+// Event queue vs microtask queue
+print('A');
+Future(() => print('C'));  // Event queue
+scheduleMicrotask(() => print('B'));  // Microtask queue
+print('A done');
+// Output: A, A done, B, C
+```
+
+## Completer
+
+<ParamField path="Completer<T>" type="class">
+  Manually controls a Future. Use when you need to complete a Future from outside the async operation.
+</ParamField>
+
+```dart
+Completer<String> completer = Completer();
+
+// Return the future
+Future<String> getResult() {
+  return completer.future;
+}
+
+// Complete it later
+void handleData(String data) {
+  if (!completer.isCompleted) {
+    completer.complete(data);
+  }
+}
+
+void handleError(Object error) {
+  if (!completer.isCompleted) {
+    completer.completeError(error);
+  }
+}
+```
+
+## Best Practices
+
+<Warning>
+1. **Always handle errors** in async code with try-catch or catchError
+2. **Don't mix** async/await with then/catchError callbacks
+3. **Cancel streams** when done to prevent memory leaks
+4. **Use await** instead of .then() for better readability
+5. **Be careful with** unawaited futures - they can cause silent failures
+</Warning>
+
+<Tip>
+**Prefer async/await over callbacks** for better code readability and error handling. Use Streams for multiple values over time, and Futures for single asynchronous results.
+</Tip>
+
+## Common Patterns
+
+```dart
+// Retry logic
+Future<T> retry<T>(Future<T> Function() operation, {int maxAttempts = 3}) async {
+  for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await operation();
+    } catch (e) {
+      if (attempt == maxAttempts) rethrow;
+      await Future.delayed(Duration(seconds: attempt));
+    }
+  }
+  throw StateError('Unreachable');
+}
+
+// Debounce stream
+Stream<T> debounce<T>(Stream<T> source, Duration duration) async* {
+  Timer? timer;
+  T? lastValue;
+  var hasValue = false;
+  
+  await for (var value in source) {
+    timer?.cancel();
+    lastValue = value;
+    hasValue = true;
+    
+    timer = Timer(duration, () {
+      if (hasValue) {
+        hasValue = false;
+      }
+    });
+  }
+}
+```
+
+## Related Resources
+
+- [Asynchronous Programming](https://dart.dev/codelabs/async-await) - Official codelab
+- [Futures and Error Handling](https://dart.dev/guides/libraries/futures-error-handling) - Error handling guide
+- [Streams Tutorial](https://dart.dev/tutorials/language/streams) - Working with streams

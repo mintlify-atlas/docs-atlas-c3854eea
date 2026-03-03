@@ -1,0 +1,721 @@
+---
+title: Embedding the Dart VM
+description: Integrate the Dart Virtual Machine into C/C++ applications
+---
+
+Embedding the Dart VM allows you to run Dart code within your C/C++ applications. This is useful for adding scripting capabilities, running Dart as a plugin system, or building custom Dart-based tools.
+
+## Overview
+
+Embedding the Dart VM involves:
+1. Initializing the VM with configuration and callbacks
+2. Creating and managing isolates
+3. Loading and executing Dart code
+4. Providing native function implementations
+5. Cleaning up resources on shutdown
+
+## Initialization
+
+### Setting Up VM Parameters
+
+The `Dart_InitializeParams` structure configures VM initialization.
+
+```c
+typedef struct {
+  int32_t version;
+  const uint8_t* vm_snapshot_data;
+  const uint8_t* vm_snapshot_instructions;
+  Dart_IsolateGroupCreateCallback create_group;
+  Dart_InitializeIsolateCallback initialize_isolate;
+  Dart_IsolateShutdownCallback shutdown_isolate;
+  Dart_IsolateCleanupCallback cleanup_isolate;
+  Dart_IsolateGroupCleanupCallback cleanup_group;
+  Dart_ThreadStartCallback thread_start;
+  Dart_ThreadExitCallback thread_exit;
+  Dart_FileOpenCallback file_open;
+  Dart_FileReadCallback file_read;
+  Dart_FileWriteCallback file_write;
+  Dart_FileCloseCallback file_close;
+  Dart_EntropySource entropy_source;
+  Dart_GetVMServiceAssetsArchive get_service_assets;
+  bool start_kernel_isolate;
+  Dart_CodeObserver* code_observer;
+} Dart_InitializeParams;
+```
+
+<ParamField path="version" type="int32_t">
+  Must be set to DART_INITIALIZE_PARAMS_CURRENT_VERSION
+</ParamField>
+
+<ParamField path="vm_snapshot_data" type="const uint8_t*">
+  Buffer containing VM snapshot data or NULL. Must remain valid until Dart_Cleanup().
+</ParamField>
+
+<ParamField path="vm_snapshot_instructions" type="const uint8_t*">
+  Buffer containing snapshot instructions or NULL. Must remain valid until Dart_Cleanup().
+</ParamField>
+
+<ParamField path="create_group" type="Dart_IsolateGroupCreateCallback">
+  Required callback for creating new isolate groups
+</ParamField>
+
+<ParamField path="shutdown_isolate" type="Dart_IsolateShutdownCallback">
+  Optional callback invoked before isolate shutdown (can run Dart code)
+</ParamField>
+
+<ParamField path="cleanup_isolate" type="Dart_IsolateCleanupCallback">
+  Optional callback invoked after isolate shutdown (cannot run Dart code)
+</ParamField>
+
+### Basic Initialization Example
+
+<CodeGroup>
+```c Minimal Initialization
+#include "dart_api.h"
+#include <stdio.h>
+#include <stdlib.h>
+
+// Isolate creation callback
+Dart_Isolate CreateIsolateGroupCallback(
+    const char* script_uri,
+    const char* main,
+    const char* package_root,
+    const char* package_config,
+    Dart_IsolateFlags* flags,
+    void* isolate_data,
+    char** error) {
+  
+  // Create the isolate
+  Dart_Isolate isolate = Dart_CreateIsolateGroupFromKernel(
+      script_uri,
+      main,
+      kernel_buffer,        // Your kernel binary
+      kernel_buffer_size,
+      flags,
+      isolate_data,
+      isolate_data,
+      error
+  );
+  
+  if (isolate == NULL) {
+    return NULL;
+  }
+  
+  // Setup the isolate
+  Dart_EnterScope();
+  
+  // Set up native resolvers, load libraries, etc.
+  Dart_Handle library = Dart_RootLibrary();
+  // ... setup code ...
+  
+  Dart_ExitScope();
+  
+  return isolate;
+}
+
+int main(int argc, char** argv) {
+  // Initialize VM parameters
+  Dart_InitializeParams params = {};
+  params.version = DART_INITIALIZE_PARAMS_CURRENT_VERSION;
+  params.vm_snapshot_data = vm_snapshot_data;
+  params.vm_snapshot_instructions = vm_snapshot_instructions;
+  params.create_group = CreateIsolateGroupCallback;
+  
+  // Initialize the VM
+  char* error = Dart_Initialize(&params);
+  if (error != NULL) {
+    fprintf(stderr, "VM initialization failed: %s\n", error);
+    free(error);
+    return 1;
+  }
+  
+  printf("Dart VM initialized successfully\n");
+  
+  // ... use the VM ...
+  
+  // Cleanup
+  error = Dart_Cleanup();
+  if (error != NULL) {
+    fprintf(stderr, "VM cleanup failed: %s\n", error);
+    free(error);
+    return 1;
+  }
+  
+  return 0;
+}
+```
+</CodeGroup>
+
+## Isolate Lifecycle Callbacks
+
+### Dart_IsolateGroupCreateCallback
+
+```c
+typedef Dart_Isolate (*Dart_IsolateGroupCreateCallback)(
+    const char* script_uri,
+    const char* main,
+    const char* package_root,
+    const char* package_config,
+    Dart_IsolateFlags* flags,
+    void* isolate_data,
+    char** error);
+```
+
+Called by the VM when a new isolate group needs to be created.
+
+<Warning>
+Must call Dart_CreateIsolateGroup() or Dart_CreateIsolateGroupFromKernel() and load the program. If returning NULL, must set *error to a malloc-allocated error message.
+</Warning>
+
+### Dart_InitializeIsolateCallback
+
+```c
+typedef bool (*Dart_InitializeIsolateCallback)(
+    void** child_isolate_data,
+    char** error);
+```
+
+Called when the VM creates an isolate within an existing isolate group.
+
+### Dart_IsolateShutdownCallback
+
+```c
+typedef void (*Dart_IsolateShutdownCallback)(
+    void* isolate_group_data,
+    void* isolate_data);
+```
+
+Called before the VM shuts down an isolate. Safe to run Dart code.
+
+### Dart_IsolateCleanupCallback
+
+```c
+typedef void (*Dart_IsolateCleanupCallback)(
+    void* isolate_group_data,
+    void* isolate_data);
+```
+
+Called after the VM shuts down an isolate. Cannot run Dart code.
+
+## Creating and Running Isolates
+
+### Complete Isolate Creation
+
+<CodeGroup>
+```c Create and Run Isolate
+#include "dart_api.h"
+
+typedef struct {
+  const uint8_t* kernel_buffer;
+  intptr_t kernel_buffer_size;
+} AppData;
+
+Dart_Isolate CreateAndSetupIsolate(
+    const char* script_uri,
+    const char* main,
+    AppData* app_data,
+    char** error) {
+  
+  // Initialize isolate flags
+  Dart_IsolateFlags flags;
+  Dart_IsolateFlagsInitialize(&flags);
+  flags.null_safety = true;
+  
+  // Create isolate from kernel
+  Dart_Isolate isolate = Dart_CreateIsolateGroupFromKernel(
+      script_uri,
+      main,
+      app_data->kernel_buffer,
+      app_data->kernel_buffer_size,
+      &flags,
+      app_data,  // isolate group data
+      app_data,  // isolate data
+      error
+  );
+  
+  if (isolate == NULL) {
+    return NULL;
+  }
+  
+  // Enter the isolate to set it up
+  Dart_EnterScope();
+  
+  // Get root library
+  Dart_Handle library = Dart_RootLibrary();
+  if (Dart_IsError(library)) {
+    *error = strdup(Dart_GetError(library));
+    Dart_ExitScope();
+    Dart_ShutdownIsolate();
+    return NULL;
+  }
+  
+  // Set up native resolver
+  Dart_Handle result = Dart_SetNativeResolver(
+      library,
+      MyNativeResolver,
+      NULL
+  );
+  
+  if (Dart_IsError(result)) {
+    *error = strdup(Dart_GetError(result));
+    Dart_ExitScope();
+    Dart_ShutdownIsolate();
+    return NULL;
+  }
+  
+  Dart_ExitScope();
+  
+  return isolate;
+}
+
+// Run main() function
+bool RunMain(Dart_Isolate isolate) {
+  Dart_EnterIsolate(isolate);
+  Dart_EnterScope();
+  
+  // Get root library
+  Dart_Handle library = Dart_RootLibrary();
+  
+  // Invoke main()
+  Dart_Handle main_name = Dart_NewStringFromCString("main");
+  Dart_Handle result = Dart_Invoke(library, main_name, 0, NULL);
+  
+  bool success = !Dart_IsError(result);
+  if (!success) {
+    fprintf(stderr, "Error running main: %s\n", Dart_GetError(result));
+  }
+  
+  Dart_ExitScope();
+  Dart_ExitIsolate();
+  
+  return success;
+}
+```
+</CodeGroup>
+
+## Loading Dart Code
+
+### From Kernel (Recommended)
+
+Kernel files (.dill) are the recommended format for loading Dart code in embedded scenarios.
+
+<CodeGroup>
+```c Load from Kernel File
+#include <stdio.h>
+#include <stdlib.h>
+
+bool LoadKernelFile(const char* path,
+                    uint8_t** buffer,
+                    intptr_t* size) {
+  FILE* file = fopen(path, "rb");
+  if (file == NULL) {
+    return false;
+  }
+  
+  // Get file size
+  fseek(file, 0, SEEK_END);
+  *size = ftell(file);
+  fseek(file, 0, SEEK_SET);
+  
+  // Allocate buffer
+  *buffer = (uint8_t*)malloc(*size);
+  if (*buffer == NULL) {
+    fclose(file);
+    return false;
+  }
+  
+  // Read file
+  size_t read = fread(*buffer, 1, *size, file);
+  fclose(file);
+  
+  return read == *size;
+}
+
+// Usage
+uint8_t* kernel_buffer;
+intptr_t kernel_size;
+
+if (!LoadKernelFile("app.dill", &kernel_buffer, &kernel_size)) {
+  fprintf(stderr, "Failed to load kernel file\n");
+  return 1;
+}
+
+// Create isolate with kernel
+Dart_Isolate isolate = Dart_CreateIsolateGroupFromKernel(
+    "app.dill",
+    "main",
+    kernel_buffer,
+    kernel_size,
+    &flags,
+    app_data,
+    app_data,
+    &error
+);
+```
+</CodeGroup>
+
+### From Snapshots
+
+Snapshots provide faster startup for AOT-compiled code.
+
+<CodeGroup>
+```c Load from Snapshot
+// Load snapshot files
+uint8_t* isolate_snapshot_data;
+uint8_t* isolate_snapshot_instructions;
+
+LoadSnapshot("isolate_snapshot_data", &isolate_snapshot_data);
+LoadSnapshot("isolate_snapshot_instructions", &isolate_snapshot_instructions);
+
+// Create isolate from snapshot
+Dart_Isolate isolate = Dart_CreateIsolateGroup(
+    "myapp",
+    "main",
+    isolate_snapshot_data,
+    isolate_snapshot_instructions,
+    &flags,
+    app_data,
+    app_data,
+    &error
+);
+```
+</CodeGroup>
+
+## Calling Dart from C
+
+### Invoking Functions
+
+<CodeGroup>
+```c Call Dart Function
+void CallDartFunction(Dart_Isolate isolate) {
+  Dart_EnterIsolate(isolate);
+  Dart_EnterScope();
+  
+  // Get the library
+  Dart_Handle library = Dart_RootLibrary();
+  
+  // Prepare arguments
+  Dart_Handle args[2];
+  args[0] = Dart_NewInteger(42);
+  args[1] = Dart_NewStringFromCString("hello");
+  
+  // Invoke the function
+  Dart_Handle function_name = Dart_NewStringFromCString("processData");
+  Dart_Handle result = Dart_Invoke(library, function_name, 2, args);
+  
+  if (Dart_IsError(result)) {
+    fprintf(stderr, "Error: %s\n", Dart_GetError(result));
+  } else {
+    // Process result
+    if (Dart_IsInteger(result)) {
+      int64_t value;
+      Dart_IntegerToInt64(result, &value);
+      printf("Result: %lld\n", value);
+    }
+  }
+  
+  Dart_ExitScope();
+  Dart_ExitIsolate();
+}
+```
+
+```c Call Closures
+void CallClosure(Dart_Handle closure, int value) {
+  Dart_EnterScope();
+  
+  Dart_Handle args[1];
+  args[0] = Dart_NewInteger(value);
+  
+  Dart_Handle result = Dart_InvokeClosure(closure, 1, args);
+  
+  if (Dart_IsError(result)) {
+    fprintf(stderr, "Closure error: %s\n", Dart_GetError(result));
+  }
+  
+  Dart_ExitScope();
+}
+```
+</CodeGroup>
+
+### Accessing Fields
+
+<CodeGroup>
+```c Get and Set Fields
+void ManipulateFields(Dart_Handle object) {
+  Dart_EnterScope();
+  
+  // Get field value
+  Dart_Handle name_field = Dart_NewStringFromCString("name");
+  Dart_Handle name_value = Dart_GetField(object, name_field);
+  
+  if (!Dart_IsError(name_value)) {
+    const char* name;
+    Dart_StringToCString(name_value, &name);
+    printf("Name: %s\n", name);
+  }
+  
+  // Set field value
+  Dart_Handle count_field = Dart_NewStringFromCString("count");
+  Dart_Handle new_value = Dart_NewInteger(100);
+  Dart_Handle result = Dart_SetField(object, count_field, new_value);
+  
+  if (Dart_IsError(result)) {
+    fprintf(stderr, "Error setting field: %s\n", Dart_GetError(result));
+  }
+  
+  Dart_ExitScope();
+}
+```
+</CodeGroup>
+
+## Complete Embedding Example
+
+<CodeGroup>
+```c Full Application
+#include "dart_api.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+// Application data
+typedef struct {
+  uint8_t* kernel_buffer;
+  intptr_t kernel_size;
+  int request_count;
+} AppData;
+
+// Native function: getRequestCount
+void GetRequestCount(Dart_NativeArguments args) {
+  AppData* app_data = (AppData*)Dart_GetNativeIsolateGroupData(args);
+  Dart_SetIntegerReturnValue(args, app_data->request_count);
+}
+
+// Native function: incrementRequestCount
+void IncrementRequestCount(Dart_NativeArguments args) {
+  AppData* app_data = (AppData*)Dart_GetNativeIsolateGroupData(args);
+  app_data->request_count++;
+}
+
+// Native resolver
+Dart_NativeFunction ResolveName(Dart_Handle name,
+                                int argc,
+                                bool* auto_setup_scope) {
+  *auto_setup_scope = true;
+  const char* c_name;
+  Dart_StringToCString(name, &c_name);
+  
+  if (strcmp(c_name, "GetRequestCount") == 0) return GetRequestCount;
+  if (strcmp(c_name, "IncrementRequestCount") == 0) return IncrementRequestCount;
+  
+  return NULL;
+}
+
+// Isolate creation callback
+Dart_Isolate CreateIsolateGroup(
+    const char* script_uri,
+    const char* main,
+    const char* package_root,
+    const char* package_config,
+    Dart_IsolateFlags* flags,
+    void* isolate_data,
+    char** error) {
+  
+  AppData* app_data = (AppData*)isolate_data;
+  
+  Dart_Isolate isolate = Dart_CreateIsolateGroupFromKernel(
+      script_uri,
+      main,
+      app_data->kernel_buffer,
+      app_data->kernel_size,
+      flags,
+      app_data,
+      app_data,
+      error
+  );
+  
+  if (isolate == NULL) return NULL;
+  
+  Dart_EnterScope();
+  
+  Dart_Handle library = Dart_RootLibrary();
+  Dart_SetNativeResolver(library, ResolveName, NULL);
+  
+  Dart_ExitScope();
+  
+  return isolate;
+}
+
+// Cleanup callback
+void CleanupIsolate(void* isolate_group_data, void* isolate_data) {
+  AppData* app_data = (AppData*)isolate_group_data;
+  printf("Total requests processed: %d\n", app_data->request_count);
+}
+
+int main(int argc, char** argv) {
+  // Load kernel file
+  AppData app_data = {0};
+  if (!LoadKernelFile("app.dill", &app_data.kernel_buffer, &app_data.kernel_size)) {
+    fprintf(stderr, "Failed to load kernel\n");
+    return 1;
+  }
+  
+  // Initialize VM
+  Dart_InitializeParams params = {};
+  params.version = DART_INITIALIZE_PARAMS_CURRENT_VERSION;
+  params.create_group = CreateIsolateGroup;
+  params.cleanup_isolate = CleanupIsolate;
+  
+  char* error = Dart_Initialize(&params);
+  if (error) {
+    fprintf(stderr, "Init failed: %s\n", error);
+    free(error);
+    return 1;
+  }
+  
+  // Create isolate
+  Dart_IsolateFlags flags;
+  Dart_IsolateFlagsInitialize(&flags);
+  
+  Dart_Isolate isolate = Dart_CreateIsolateGroupFromKernel(
+      "app.dill",
+      "main",
+      app_data.kernel_buffer,
+      app_data.kernel_size,
+      &flags,
+      &app_data,
+      &app_data,
+      &error
+  );
+  
+  if (isolate == NULL) {
+    fprintf(stderr, "Failed to create isolate: %s\n", error);
+    free(error);
+    Dart_Cleanup();
+    return 1;
+  }
+  
+  // Run main()
+  Dart_EnterScope();
+  Dart_Handle lib = Dart_RootLibrary();
+  Dart_Handle main_name = Dart_NewStringFromCString("main");
+  Dart_Handle result = Dart_Invoke(lib, main_name, 0, NULL);
+  
+  if (Dart_IsError(result)) {
+    fprintf(stderr, "Error: %s\n", Dart_GetError(result));
+  }
+  
+  Dart_ExitScope();
+  
+  // Cleanup
+  Dart_ShutdownIsolate();
+  Dart_Cleanup();
+  free(app_data.kernel_buffer);
+  
+  return 0;
+}
+```
+</CodeGroup>
+
+## File I/O Callbacks
+
+Provide file I/O callbacks if your Dart code needs file access.
+
+<CodeGroup>
+```c File Callbacks
+void* FileOpen(const char* name, bool write) {
+  return fopen(name, write ? "wb" : "rb");
+}
+
+void FileRead(uint8_t** data, intptr_t* file_length, void* stream) {
+  FILE* file = (FILE*)stream;
+  
+  fseek(file, 0, SEEK_END);
+  *file_length = ftell(file);
+  fseek(file, 0, SEEK_SET);
+  
+  *data = (uint8_t*)malloc(*file_length);
+  if (*data == NULL) {
+    *file_length = -1;
+    return;
+  }
+  
+  size_t read = fread(*data, 1, *file_length, file);
+  if (read != *file_length) {
+    free(*data);
+    *data = NULL;
+    *file_length = -1;
+  }
+}
+
+void FileWrite(const void* data, intptr_t length, void* stream) {
+  FILE* file = (FILE*)stream;
+  fwrite(data, 1, length, file);
+}
+
+void FileClose(void* stream) {
+  fclose((FILE*)stream);
+}
+
+// Set in params
+params.file_open = FileOpen;
+params.file_read = FileRead;
+params.file_write = FileWrite;
+params.file_close = FileClose;
+```
+</CodeGroup>
+
+## Best Practices
+
+1. **Snapshot Management** - Keep snapshot buffers valid for the lifetime of isolates using them
+2. **Error Handling** - Always check return values and handle errors appropriately
+3. **Resource Cleanup** - Use cleanup callbacks to free embedder-allocated resources
+4. **Thread Safety** - Only one thread can be in an isolate at a time; use proper synchronization
+5. **Scope Management** - Balance Dart_EnterScope()/Dart_ExitScope() calls
+6. **Isolate Data** - Use isolate_group_data for shared context, isolate_data for per-isolate context
+
+## Common Patterns
+
+### Event Loop Integration
+
+<CodeGroup>
+```c Message Handling
+void MessageNotifyCallback(Dart_Isolate isolate) {
+  // Called when isolate has messages
+  // Integrate with your event loop
+  ScheduleIsolateProcessing(isolate);
+}
+
+Dart_SetMessageNotifyCallback(isolate, MessageNotifyCallback);
+```
+</CodeGroup>
+
+### Multi-Isolate Management
+
+<CodeGroup>
+```c Multiple Isolates
+typedef struct {
+  Dart_Isolate isolate;
+  pthread_t thread;
+  bool running;
+} IsolateContext;
+
+void* IsolateThread(void* arg) {
+  IsolateContext* ctx = (IsolateContext*)arg;
+  
+  Dart_EnterIsolate(ctx->isolate);
+  
+  while (ctx->running) {
+    // Process messages
+    Dart_RunLoop();
+  }
+  
+  Dart_ExitIsolate();
+  return NULL;
+}
+```
+</CodeGroup>
+
+## See Also
+
+- [Dart VM C API Overview](/api/dart-api) - Complete API reference
+- [Native Extensions](/api/native-extensions) - Creating native extensions

@@ -1,0 +1,255 @@
+---
+title: Issue Triaging Process
+description: How Dart SDK issues are triaged, labeled, and prioritized
+---
+
+The Dart SDK repository contains tools and libraries maintained by multiple sub-teams. Effective triaging ensures issues reach the right team with appropriate priority labels.
+
+## Triage Workflow
+
+<Steps>
+  <Step title="Find untriaged issues">
+    Use the [SDK triage query](https://goto.google.com/dart-triage) to find issues without area labels.
+  </Step>
+  
+  <Step title="Assign area label">
+    Does the issue relate to code in the SDK?
+    - Add the appropriate `area-*` label to assign ownership to a team
+    - If uncertain, add `area-meta` and assign to someone who can coordinate
+  </Step>
+  
+  <Step title="Add library label for core libraries">
+    For `area-core-library` issues, also add the specific `library-*` label:
+    - `library-io`
+    - `library-async`
+    - `library-core`
+    - etc.
+  </Step>
+  
+  <Step title="Add type label (optional)">
+    If obviously a bug or enhancement, add:
+    - `type-bug`
+    - `type-enhancement`
+    - `type-documentation`
+    - `type-performance`
+    - Other type labels as appropriate
+  </Step>
+  
+  <Step title="Transfer if needed">
+    Does the issue belong in another dart-lang repository?
+    - Use the "Transfer issue" link to move it to the correct repo
+  </Step>
+</Steps>
+
+<Info>
+Set up email notifications for labels you care about using the [Dart SDK email tool](https://dart-github-label-notifier.web.app).
+</Info>
+
+## Issue Labels
+
+### Area Labels (area-*)
+
+Area labels assign ownership to specific teams. Every issue must have exactly one area label.
+
+<Warning>
+Issues with no area label or multiple area labels often fall through the cracks. Single ownership ensures accountability.
+</Warning>
+
+**Special case**: `area-meta` issues coordinate work across multiple teams:
+- Should link to specific issues for each team
+- Must be assigned to a person (not just a team)
+- That person tracks progress and closes when all linked issues are complete
+
+### Priority Labels
+
+Priority reflects team urgency, not user impact alone.
+
+| Priority | Meaning | Release Impact |
+|----------|---------|----------------|
+| **P0** | Drop everything and fix it | Dev: blocks release, valid cherry-pick<br/>Stable: worthy of dot release |
+| **P1** | Planned for in-progress release | Should align with other work to ensure completion |
+| **P2** | Important work for later release | Should be done eventually |
+| **P3** | Maybe, someday | First candidates for closing as "not planned" |
+
+<Info>
+Priority is the team's opinion and may change as other issues are resolved or new ones appear. "If everything is P0, nothing is P0."
+</Info>
+
+### During Cherry-Pick Season
+
+When entering cherry-pick season for release X:
+
+- **P0 issues**: Only fixes that will be taken for release X
+- **P1-P3 issues**: Either:
+  - Milestone changed to release X+1, or
+  - Priority downgraded to P2/P3 and milestone removed
+
+### Type Labels (type-*)
+
+Every issue should have exactly one type label:
+
+| Type | Description |
+|------|-------------|
+| `type-bug` | Current behavior is wrong and unintended |
+| `type-enhancement` | New feature or improvement to existing feature |
+| `type-documentation` | Documentation additions or improvements |
+| `type-performance` | Correct behavior but inefficient (time, memory, startup) |
+| `type-security` | Privacy or security vulnerabilities |
+| `type-code-health` | Internal improvements not visible to users |
+| `type-task` | Work that doesn't change code (infrastructure, publishing, etc.) |
+
+### Closed Labels (closed-*)
+
+Applied to closed issues to explain the resolution:
+
+| Label | Meaning | When to Use |
+|-------|---------|-------------|
+| `closed-as-intended` | Current behavior is desired | Trade-offs or constraints prevent requested behavior |
+| `closed-cannot-reproduce` | Unable to verify the issue | Bug may be fixed or needs better reproduction steps |
+| `closed-duplicate` | Already tracked in another issue | Comment should link to the duplicate issue |
+| `closed-invalid` | Unclear or unrelated to Dart | Genuinely confusing or misfiled issues |
+| `closed-obsolete` | Long inactive with no progress | May be reopened if it becomes relevant again |
+| `closed-not-planned` | Valid but not expected to happen | Capacity or priority constraints |
+
+<Info>
+If an issue is closed without a closed label, it's assumed to be fixed. There should be a link to the fixing commit.
+</Info>
+
+### Other Important Labels
+
+**needs-info**: Additional information needed from the reporter
+- Add a comment explaining what information is needed
+- Bot will auto-close after 14 days without response
+- Used when initial description is unclear or validation is needed
+
+**contributions-welcome**: Vetted as legitimate and suitable for external contributors
+- Should not be overly difficult
+- Should not require extensive code
+- Typically bugs or documentation, not feature requests (due to review/maintenance cost)
+
+**blocked**: Unable to make progress due to external dependency
+- Comment should explain the blocker
+- Link to blocking issue when possible
+
+### Platform and Environment Labels
+
+**Browser labels**: Which browsers are affected (when applicable)
+
+**OS labels** (`os-*`): Which operating systems are affected
+
+<Warning>
+These labels indicate known affected platforms but don't guarantee other platforms are unaffected. Absence may mean "not investigated" rather than "not affected."
+</Warning>
+
+**Customer labels** (`customer-*`): Tracks key partners affected or Dart subteams impacted
+
+Example: VM bug about static errors would have:
+- `area-cfe` (front end team handles static errors)
+- `customer-vm` (where the error isn't surfacing)
+
+## Team-Specific Triage: VM and IO Library
+
+Issues with `area-vm` or `area-core-library` + `library-io` are triaged weekly by the Dart VM team.
+
+<Steps>
+  <Step title="Classify the issue">
+    Determine the type:
+    - `type-bug`
+    - `type-enhancement`
+    - `type-performance`
+    - `type-question`
+    - `type-documentation`
+    - Other types as appropriate
+  </Step>
+  
+  <Step title="Request info if needed">
+    Add `needs-info` label and comment asking for specific information.
+  </Step>
+  
+  <Step title="Assign priority">
+    Apply priority based on impact:
+    
+    - **P0**: Critically impacts many users
+      - Someone actively working on it
+      - Daily updates posted
+      - Definitely a cherry-pick candidate
+    
+    - **P1**: Blocks several users
+      - Desirable for next beta release
+      - Weekly updates
+      - Could be cherry-picked to previous stable
+    
+    - **P2**: Important for small group or minor for many
+      - Desirable for next stable release
+      - Quarterly updates
+    
+    - **P3**: Not critical, not actively addressed
+  </Step>
+  
+  <Step title="Assign developer (P0-P2 only)">
+    For P0-P2 issues, assign to a specific developer.
+  </Step>
+  
+  <Step title="Set milestone and mark triaged">
+    - Assign milestone based on priority
+    - Add `triaged` label to indicate the issue has been reviewed
+  </Step>
+</Steps>
+
+<Info>
+Priorities and milestones may be adjusted based on user feedback and team bandwidth.
+</Info>
+
+## Assignment Policy
+
+Dart uses a pull model for task assignment:
+
+- Most issues assigned to a team (via area label), not an individual
+- When someone starts active work, they assign the issue to themselves
+- Assigned issues are usually in-progress (but not always)
+- Assignees may not unassign when work is paused
+
+<Info>
+If an issue is assigned to a person, it's likely being worked on, but check recent activity to confirm.
+</Info>
+
+## Triage Automation
+
+The Dart SDK uses automated triage assistance:
+
+- **@dart-github-bot** may comment on issues as part of automation experiments
+- **No-response bot** auto-closes `needs-info` issues after 14 days without response
+- Automation source: [sdk_triage_bot](https://github.com/dart-lang/ecosystem/tree/main/pkgs/sdk_triage_bot)
+
+<Info>
+You can safely ignore bot comments if they're not relevant to your work.
+</Info>
+
+## Queries for Triagers
+
+Useful queries for finding issues that need attention:
+
+- [Issues with no area](https://github.com/dart-lang/sdk/issues?utf8=%E2%9C%93&q=is%3Aissue+is%3Aopen+-label%3Aarea-build+-label%3Aarea-dart2js+-label%3Aarea-dart-model+-label%3Aarea-devexp+-label%3Aarea-dev-compiler+-label%3Aarea-documentation+-label%3Aarea-front-end+-label%3Aarea-html+-label%3Aarea-infrastructure+-label%3Aarea-intellij+-label%3Aarea-js-interop+-label%3Aarea-kernel+-label%3Aarea-language+-label%3Aarea-library+-label%3Aarea-meta+-label%3Aarea-observatory+-label%3Aarea-pkg+-label%3Aarea-samples+-label%3Aarea-sdk+-label%3Aarea-spec-parser+-label%3Aarea-specification+-label%3Aarea-test+-label%3Aarea-vm)
+- [Issues with no priority](https://github.com/dart-lang/sdk/issues?utf8=%E2%9C%93&q=is%3Aissue+is%3Aopen+-label%3Ap0-critical+-label%3Ap1-high+-label%3Ap2-medium+-label%3Ap3-low+)
+- [Issues with no type](https://github.com/dart-lang/sdk/issues?utf8=%E2%9C%93&q=is%3Aissue+is%3Aopen+-label%3Atype-bug+-label%3Atype-code-health+-label%3Atype-documentation+-label%3Atype-enhancement+-label%3Atype-performance+-label%3Atype-security+-label%3Atype-task)
+- [Meta-issues with no assignee](https://github.com/dart-lang/sdk/issues?utf8=%E2%9C%93&q=is%3Aissue+is%3Aopen+label%3Aarea-meta+no%3Aassignee)
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Single ownership" icon="user">
+    Every issue should have exactly one area label for clear accountability.
+  </Card>
+  
+  <Card title="Consistent priorities" icon="layer-group">
+    Priority reflects team urgency, balanced across all issues.
+  </Card>
+  
+  <Card title="Regular updates" icon="clock">
+    P0: daily, P1: weekly, P2: quarterly communication on progress.
+  </Card>
+  
+  <Card title="Clear resolutions" icon="check">
+    Use closed-* labels and comments to explain why issues are closed.
+  </Card>
+</CardGroup>

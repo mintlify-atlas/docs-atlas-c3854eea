@@ -1,0 +1,569 @@
+---
+title: VM Flags and Configuration
+description: Comprehensive reference for Dart VM command-line flags and runtime configuration options
+---
+
+The Dart VM provides extensive configuration through command-line flags controlling compilation, garbage collection, debugging, and performance tuning.
+
+## Flag Categories
+
+Flags are categorized by availability:
+
+- **P**roduct - Available in all deployment modes including production
+- **R**elease - Available except in product builds
+- **C**ompile - Available except in product or precompiled runtime
+- **D**ebug - Only in debug builds with C++ assertions enabled
+
+## Compilation Flags
+
+### Optimization Control
+
+```bash
+# Optimization threshold (-1 = never optimize)
+--optimization_counter_threshold=30000
+
+# Optimization level: 1 (size), 2 (default), 3 (speed)
+--optimization_level=2
+
+# Background compilation
+--background_compilation=true
+--no-background-compilation  # Force main thread compilation
+```
+
+### Inlining Configuration
+
+```bash
+# Call count threshold for inlining
+--inlining_hotness=<count>
+
+# Maximum caller size before inlining disabled
+--inlining_caller_size_threshold=<nodes>
+
+# Maximum size of function to inline
+--inlining_callee_size_threshold=<nodes>
+
+# Maximum inlining depth
+--inlining_depth_threshold=<depth>
+
+# Inline getters/setters smaller than N nodes
+--inline_getters_setters_smaller_than=<nodes>
+
+# Constant argument thresholds
+--inlining_constant_arguments_max_size_threshold=<nodes>
+--inlining_constant_arguments_min_size_threshold=<nodes>
+```
+
+### Feature Toggles
+
+```bash
+# On-stack replacement for long-running functions
+--use_osr=true
+
+# Class hierarchy analysis with deoptimization
+--use_cha_deopt=true
+
+# Track field types with guards  
+--use_field_guards=true
+
+# Inline allocation fast paths
+--inline_alloc=true
+
+# Reorder basic blocks for better cache locality
+--reorder_basic_blocks=true
+
+# Polymorphic calls with deoptimization
+--polymorphic_with_deopt=true
+
+# Maximum polymorphic checks before megamorphic
+--max_polymorphic_checks=4
+
+# Maximum polymorphic checks in equality operator
+--max_equality_polymorphic_checks=32
+
+# Avoid inline fast paths (for debugging)
+--use_slow_path=false
+
+# Truncating left shift optimization
+--truncating_left_shift=true
+```
+
+## Garbage Collection Flags
+
+### Heap Size Configuration
+
+```bash
+# Old generation max size in MB (0 = unlimited)
+--old_gen_heap_size=0
+
+# New generation semi-space max size in MB
+--new_gen_semi_max_size=<platform-default>
+
+# New generation initial size in MB (1 on 32-bit, 2 on 64-bit)
+--new_gen_semi_initial_size=<platform-default>
+
+# Abort if allocation fails (use with --old-gen-heap-size)
+--abort_on_oom=false
+```
+
+### GC Modes
+
+```bash
+# Concurrent marking for old generation
+--concurrent_mark=true
+
+# Concurrent sweep for old generation
+--concurrent_sweep=true
+
+# Use compactor for old-space GC
+--use_compactor=false
+
+# Use incremental compactor
+--use_incremental_compactor=true
+
+# Dart thread assists marking during idle time
+--mark_when_idle=false
+```
+
+### Parallel Task Configuration
+
+```bash
+# Scavenger tasks (0=main thread, -1=auto based on isolates)
+--scavenger_tasks=-1
+
+# Old gen marking tasks (0=main thread only)
+--marker_tasks=2
+
+# Compaction tasks
+--compactor_tasks=2
+```
+
+### GC Tuning
+
+```bash
+# madvise(DONTNEED) on free regions
+--dontneed_on_sweep=false
+
+# Verbose GC logging
+--verbose_gc=false
+
+# Print verbose GC header every N collections
+--verbose_gc_hdr=40
+```
+
+### GC Verification (Release Mode)
+
+```bash
+# Verify heap before GC
+--verify_before_gc=false
+
+# Verify heap after GC  
+--verify_after_gc=false
+
+# Verify store buffer before and after scavenge
+--verify_store_buffer=false
+
+# Verify heap after marking
+--verify_after_marking=false
+```
+
+## Debugging and Diagnostics
+
+### Compilation Output
+
+```bash
+# Print unoptimized IL for all compilations
+--print-flow-graph
+
+# Print optimized IL only
+--print-flow-graph-optimized
+
+# Filter output to functions matching substrings
+--print-flow-graph-filter=foo,bar
+
+# Disassemble all compiled code
+--disassemble
+
+# Disassemble optimized code only  
+--disassemble-optimized
+
+# Use offsets instead of absolute PCs
+--disassemble-relative
+
+# Disassemble generated stubs
+--disassemble-stubs
+
+# Include code comments in disassembly
+--code_comments=false
+```
+
+### Compiler Pass Control
+
+```bash
+# List available passes and options
+--compiler-passes=help
+
+# Run specific passes only, print IL before/after
+--compiler-passes=[pass1,pass2]
+
+# Example: print IL before and after inlining
+--compiler-passes=Inlining[print_diff]
+```
+
+### Trace Flags
+
+```bash
+# Trace all compilations
+--trace_compiler=false
+
+# Trace optimizing compilations only
+--trace_optimizing_compiler=false
+
+# Print optimization details
+--trace_optimization=false
+
+# Trace deoptimizations
+--trace_deoptimization=false
+
+# Verbose deoptimization instruction trace  
+--trace_deoptimization_verbose=false
+
+# Trace inlining decisions
+--trace_inlining_intervals=false
+
+# Trace type-based optimizations
+--trace_strong_mode_types=false
+
+# Trace field guard changes
+--trace_field_guards=false
+
+# Trace CHA operations
+--trace_cha=false
+
+# Trace IC (inline cache) operations
+--trace_ic=false
+
+# Trace IC misses in optimized code
+--trace_ic_miss_in_optimized=false
+
+# Trace runtime type checks  
+--trace_type_checks=false
+
+# Verbose type check traces
+--trace_type_checks_verbose=false
+
+# Trace runtime calls
+--trace_runtime_calls=false
+
+# Trace native invocations
+--trace_natives=false
+
+# Trace isolate lifecycle
+--trace_isolates=false
+
+# Trace profiler
+--trace_profiler=false
+
+# Verbose profiler trace
+--trace_profiler_verbose=false
+
+# Trace SSA register allocation
+--trace_ssa_allocator=false
+```
+
+### Snapshot Flags
+
+```bash
+# Print snapshot sizes
+--print_snapshot_sizes=false
+
+# Verbose snapshot cluster sizes
+--print_snapshot_sizes_verbose=false
+
+# Add symbols for read-only data objects
+--add_readonly_data_symbols=false
+```
+
+## Performance and Profiling
+
+### Profiler Configuration
+
+```bash
+# Enable the profiler
+--profiler=false
+
+# Enable native memory statistics collection
+--profiler_native_memory=false
+```
+
+### Perf Integration
+
+```bash
+# Perf --control file descriptor (ctl-fifo)
+--perf_ctl_fd=-1
+
+# Perf --control ack file descriptor (ack-fifo)
+--perf_ctl_fd_ack=-1
+
+# When to signal perf --control:
+#   1 = pause on GC
+#   2 = start on GC  
+#   other values ignored
+--perf_ctl_usage=-1
+```
+
+<Warning>
+The perf control flags are useful for accurate performance testing of AOT-compiled code together with `--deterministic`.
+</Warning>
+
+### Determinism
+
+```bash
+# Disable non-deterministic sources (concurrent GC, compiler)
+--deterministic=false
+```
+
+## Testing and Stress Flags
+
+### Deoptimization Testing
+
+```bash
+# Deoptimize every N stack overflow checks
+--deoptimize_every=0
+
+# Deoptimize before returning to Dart from native
+--deoptimize_alot=false
+
+# Deoptimize on every Nth runtime call
+--deoptimize_on_runtime_call_every=0
+```
+
+### Stress Testing
+
+```bash
+# Stress test async stack traces
+--stress_async_stacks=false
+```
+
+## Language and Runtime Features
+
+### Feature Flags
+
+```bash
+# Enable assert statements
+--enable_asserts=false
+
+# Enable dart:mirrors (disable to make import an error)
+--enable_mirrors=true
+
+# Enable dart:ffi (disable to make import an error)
+--enable_ffi=true
+```
+
+### Debugging Aids
+
+```bash
+# Show invisible frames in stack traces
+--show_invisible_frames=false
+
+# Check token position validity during compilation
+--check_token_positions=false
+
+# Print scopes after scope building
+--print_scopes=false
+
+# Print variable descriptors in disassembly
+--print_variable_descriptors=false
+
+# Print SSA live ranges after allocation
+--print_ssa_liveranges=false
+
+# Attempt to print native stack on API error
+--print_stacktrace_at_api_error=false
+```
+
+## AOT-Specific Flags
+
+```bash
+# Precompilation mode
+--precompiled_mode=false
+
+# Canonicalize instructions when precompiling
+--dedup_instructions=false
+
+# Retain function objects in precompiled runtime
+--retain_function_objects=true
+
+# Retain code objects in precompiled runtime  
+--retain_code_objects=true
+
+# Generate code for unknown CPU
+--target_unknown_cpu=false
+
+# Print object layout to file
+--print_object_layout_to=<file>
+
+# Print retained object reasons to file
+--write_retained_reasons_to=<file>
+
+# Print precompiler phase timings
+--print_precompiler_timings=false
+
+# Print unique dynamic targets
+--print_unique_targets=false
+
+# Trace precompiler operations
+--trace_precompiler=false
+```
+
+## Advanced Configuration
+
+### Thread Pool
+
+```bash
+# Idle timeout for thread pool isolates (microseconds)
+--idle_timeout_micros=61000000
+
+# Idle task duration limit (microseconds)
+--idle_duration_micros=<maxint32>
+```
+
+### Hash Maps
+
+```bash
+# Limit probe count in hash map lookups
+--hash_map_probes_limit=<maxint32>
+```
+
+### Natives
+
+```bash
+# Link native calls lazily
+--link_natives_lazily=false
+
+# Report intrinsified native invocations
+--trace_intrinsified_natives=false
+```
+
+### Code Generation
+
+```bash
+# Collect dynamic function names for unique target identification
+--collect_dynamic_function_names=true
+
+# Force clone compiler objects (ICData, Field)
+--force_clone_compiler_objects=false
+
+# Artificially create type feedback for arithmetic operations
+--guess_icdata_cid=true
+
+# Huge method cutoff in AST nodes (disables optimizations)
+--huge_method_cutoff_in_ast_nodes=10000
+```
+
+## Pause and Debugging
+
+### Isolate Pause Points (Release Mode)
+
+```bash
+# Pause isolates before starting
+--pause_isolates_on_start=false
+
+# Pause isolates on exit
+--pause_isolates_on_exit=false  
+
+# Pause on unhandled exceptions
+--pause_isolates_on_unhandled_exceptions=false
+```
+
+## Usage Examples
+
+### Optimize for Size
+
+```bash
+dart --optimization_level=1 app.dart
+```
+
+### Optimize for Speed
+
+```bash
+dart --optimization_level=3 app.dart
+```
+
+### Debug Optimizations
+
+```bash
+dart --print-flow-graph-optimized \
+     --disassemble-optimized \
+     --print-flow-graph-filter=myFunction \
+     --no-background-compilation \
+     app.dart
+```
+
+### Trace Deoptimizations
+
+```bash
+dart --trace_deoptimization app.dart
+```
+
+### Deterministic Benchmarking
+
+```bash
+dart --deterministic \
+     --no-background-compilation \
+     benchmark.dart
+```
+
+### Memory-Constrained Environment
+
+```bash
+dart --old_gen_heap_size=512 \
+     --new_gen_semi_max_size=8 \
+     app.dart
+```
+
+### Verbose GC Analysis
+
+```bash
+dart --verbose_gc \
+     --trace_profiler \
+     app.dart
+```
+
+### Disable Optimizations
+
+```bash
+dart --optimization_counter_threshold=-1 app.dart
+```
+
+<Warning>
+Many debug and trace flags significantly impact performance and should only be used for development and diagnostics, never in production.
+</Warning>
+
+## Performance Tips
+
+### For Development
+
+- Use default flags for fastest edit-compile-run cycle
+- Add `--deterministic` for benchmarking consistency
+- Use `--no-background-compilation` when profiling specific functions
+
+### For Production
+
+- Use AOT compilation for mobile/embedded platforms
+- Consider `--optimization_level=1` for size-constrained environments
+- Use `--optimization_level=3` when peak performance is critical
+- Set `--old_gen_heap_size` on memory-constrained devices
+
+### For Debugging Performance Issues
+
+1. Start with `--trace_deoptimization` to find unexpected deoptimizations
+2. Use `--print-flow-graph-optimized` to inspect optimized IL
+3. Check `--trace_optimization` for why optimizations didn't apply  
+4. Use `--disassemble-optimized` to see actual machine code
+5. Profile with `--profiler` to find hot spots
+
+## Key Source Files
+
+- `runtime/vm/flag_list.h` - Complete flag definitions
+- `runtime/vm/flags.h` - Flag system interface
+- `runtime/vm/flags.cc` - Flag parsing and management

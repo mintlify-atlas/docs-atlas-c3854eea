@@ -1,0 +1,674 @@
+---
+title: Kernel AST Structure
+description: Complete reference for Dart Kernel Abstract Syntax Tree node types and their structure
+---
+
+The Kernel AST is an in-memory representation of Dart programs designed for transformation and analysis. This page documents the main AST node types and their structure.
+
+## Base Types
+
+All AST nodes inherit from `TreeNode`, the base class for all nodes in the tree:
+
+```dart
+abstract class TreeNode {
+  TreeNode? parent;
+  int fileOffset = noOffset;
+  
+  R accept<R>(Visitor<R> v);
+  void visitChildren(Visitor v);
+  void transformChildren(Transformer v);
+}
+```
+
+## Component and Libraries
+
+### Component
+
+The root of a Kernel program:
+
+```dart
+class Component extends TreeNode {
+  final CanonicalName root;
+  final List<Library> libraries;
+  final Map<Uri, Source> uriToSource;
+  final Map<String, MetadataRepository<dynamic>> metadata;
+  Reference? mainMethodName;
+}
+```
+
+### Library
+
+Represents a Dart library:
+
+```dart
+class Library extends NamedNode {
+  String name;
+  Uri importUri;
+  Uri fileUri;
+  List<Expression> annotations;
+  List<LibraryDependency> libraryDependencies;
+  List<Typedef> typedefs;
+  List<Class> classes;
+  List<Extension> extensions;
+  List<ExtensionTypeDeclaration> extensionTypeDeclarations;
+  List<Field> fields;
+  List<Procedure> procedures;
+}
+```
+
+## Type Declarations
+
+### Class
+
+Regular class or mixin application:
+
+```dart
+class class extends NamedNode implements TypeDeclaration {
+  String name;
+  List<Expression> annotations;
+  List<TypeParameter> typeParameters;
+  DartType? supertype;
+  DartType? mixedInType;
+  List<DartType> implementedTypes;
+  List<Field> fields;
+  List<Constructor> constructors;
+  List<Procedure> procedures;
+  
+  // Flags
+  bool isAbstract;
+  bool isEnum;
+  bool isMixinDeclaration;
+  bool isSealed;
+  bool isFinal;
+  bool isBase;
+  bool isInterface;
+  bool isMixinClass;
+}
+```
+
+### Extension
+
+Extension declarations:
+
+```dart
+class Extension extends NamedNode {
+  String name;
+  List<TypeParameter> typeParameters;
+  DartType onType;
+  List<ExtensionMemberDescriptor> members;
+}
+```
+
+### ExtensionTypeDeclaration
+
+Extension type declarations (Dart 3.0+):
+
+```dart
+class ExtensionTypeDeclaration extends NamedNode {
+  String name;
+  List<TypeParameter> typeParameters;
+  DartType declaredRepresentationType;
+  String representationName;
+  List<DartType> implements;
+  List<Procedure> procedures;
+  List<ExtensionTypeMemberDescriptor> members;
+}
+```
+
+## Members
+
+### Field
+
+```dart
+class Field extends Member {
+  Name name;
+  DartType type;
+  Expression? initializer;
+  
+  bool isFinal;
+  bool isConst;
+  bool isStatic;
+  bool isLate;
+  bool isCovariantByDeclaration;
+}
+```
+
+### Constructor
+
+```dart
+class Constructor extends Member {
+  Name name;
+  FunctionNode function;
+  List<Initializer> initializers;
+  
+  bool isConst;
+  bool isExternal;
+  bool isSynthetic;
+}
+```
+
+### Procedure
+
+Methods, getters, setters, operators, and factory constructors:
+
+```dart
+class Procedure extends Member {
+  Name name;
+  ProcedureKind kind; // Method, Getter, Setter, Operator, Factory
+  FunctionNode function;
+  
+  bool isStatic;
+  bool isAbstract;
+  bool isExternal;
+  bool isConst;
+}
+```
+
+### FunctionNode
+
+Represents function signatures and bodies:
+
+```dart
+class FunctionNode extends TreeNode {
+  List<TypeParameter> typeParameters;
+  List<VariableDeclaration> positionalParameters;
+  List<VariableDeclaration> namedParameters;
+  int requiredParameterCount;
+  DartType returnType;
+  Statement? body;
+  AsyncMarker asyncMarker; // Sync, Async, SyncStar, AsyncStar
+}
+```
+
+## Expressions
+
+Expressions represent computations that produce values.
+
+### Literals
+
+```dart
+// Basic literals
+class IntLiteral extends Expression {
+  int value;
+}
+
+class DoubleLiteral extends Expression {
+  double value;
+}
+
+class BoolLiteral extends Expression {
+  bool value;
+}
+
+class StringLiteral extends Expression {
+  String value;
+}
+
+class NullLiteral extends Expression {}
+
+class SymbolLiteral extends Expression {
+  String value;
+}
+
+class TypeLiteral extends Expression {
+  DartType type;
+}
+```
+
+### Collection Literals
+
+```dart
+class ListLiteral extends Expression {
+  DartType typeArgument;
+  List<Expression> expressions;
+}
+
+class SetLiteral extends Expression {
+  DartType typeArgument;
+  List<Expression> expressions;
+}
+
+class MapLiteral extends Expression {
+  DartType keyType;
+  DartType valueType;
+  List<MapLiteralEntry> entries;
+}
+
+class RecordLiteral extends Expression {
+  List<Expression> positional;
+  List<NamedExpression> named;
+  DartType recordType;
+}
+```
+
+### Variable Access
+
+```dart
+class VariableGet extends Expression {
+  VariableDeclaration variable;
+  DartType? promotedType;
+}
+
+class VariableSet extends Expression {
+  VariableDeclaration variable;
+  Expression value;
+}
+```
+
+### Property Access
+
+```dart
+class InstanceGet extends Expression {
+  Expression receiver;
+  Name name;
+  DartType resultType;
+  Member? interfaceTarget;
+}
+
+class InstanceSet extends Expression {
+  Expression receiver;
+  Name name;
+  Expression value;
+  Member? interfaceTarget;
+}
+
+class DynamicGet extends Expression {
+  Expression receiver;
+  Name name;
+}
+
+class StaticGet extends Expression {
+  Member target;
+}
+
+class SuperPropertyGet extends Expression {
+  Name name;
+  Member? interfaceTarget;
+}
+```
+
+### Invocations
+
+```dart
+class InstanceInvocation extends Expression {
+  Expression receiver;
+  Name name;
+  Arguments arguments;
+  DartType functionType;
+  Member? interfaceTarget;
+}
+
+class DynamicInvocation extends Expression {
+  Expression receiver;
+  Name name;
+  Arguments arguments;
+}
+
+class FunctionInvocation extends Expression {
+  Expression receiver;
+  Arguments arguments;
+  DartType functionType;
+}
+
+class StaticInvocation extends Expression {
+  Procedure target;
+  Arguments arguments;
+}
+
+class ConstructorInvocation extends Expression {
+  Constructor target;
+  Arguments arguments;
+}
+```
+
+### Control Flow Expressions
+
+```dart
+class ConditionalExpression extends Expression {
+  Expression condition;
+  Expression then;
+  Expression otherwise;
+  DartType? staticType;
+}
+
+class LogicalExpression extends Expression {
+  Expression left;
+  LogicalOperator operator; // &&, ||
+  Expression right;
+}
+
+class Let extends Expression {
+  VariableDeclaration variable;
+  Expression body;
+}
+```
+
+### Type Operations
+
+```dart
+class IsExpression extends Expression {
+  Expression operand;
+  DartType type;
+}
+
+class AsExpression extends Expression {
+  Expression operand;
+  DartType type;
+  bool isTypeError;
+  bool isCovarianceCheck;
+}
+
+class NullCheck extends Expression {
+  Expression operand;
+}
+```
+
+### Pattern Matching (Dart 3.0+)
+
+```dart
+class SwitchExpression extends Expression {
+  Expression expression;
+  List<SwitchExpressionCase> cases;
+  DartType? staticType;
+}
+
+class PatternAssignment extends Expression {
+  Pattern pattern;
+  Expression expression;
+}
+```
+
+## Statements
+
+### Basic Statements
+
+```dart
+class ExpressionStatement extends Statement {
+  Expression expression;
+}
+
+class Block extends Statement {
+  List<Statement> statements;
+}
+
+class EmptyStatement extends Statement {}
+
+class ReturnStatement extends Statement {
+  Expression? expression;
+}
+```
+
+### Variable Declaration
+
+```dart
+class VariableDeclaration extends Statement {
+  String name;
+  DartType type;
+  Expression? initializer;
+  
+  bool isFinal;
+  bool isConst;
+  bool isLate;
+  bool isRequired;
+}
+```
+
+### Control Flow
+
+```dart
+class IfStatement extends Statement {
+  Expression condition;
+  Statement then;
+  Statement otherwise;
+}
+
+class WhileStatement extends Statement {
+  Expression condition;
+  Statement body;
+}
+
+class DoStatement extends Statement {
+  Statement body;
+  Expression condition;
+}
+
+class ForStatement extends Statement {
+  List<VariableDeclaration> variables;
+  Expression? condition;
+  List<Expression> updates;
+  Statement body;
+}
+
+class ForInStatement extends Statement {
+  VariableDeclaration variable;
+  Expression iterable;
+  Statement body;
+}
+```
+
+### Switch Statement
+
+```dart
+class SwitchStatement extends Statement {
+  Expression expression;
+  List<SwitchCase> cases;
+  bool isExplicitlyExhaustive;
+}
+
+class SwitchCase {
+  List<Expression> expressions;
+  Statement body;
+  bool isDefault;
+}
+
+class PatternSwitchStatement extends Statement {
+  Expression expression;
+  List<PatternSwitchCase> cases;
+}
+```
+
+### Exception Handling
+
+```dart
+class TryCatch extends Statement {
+  Statement body;
+  List<Catch> catches;
+}
+
+class Catch {
+  DartType guard;
+  VariableDeclaration? exception;
+  VariableDeclaration? stackTrace;
+  Statement body;
+}
+
+class TryFinally extends Statement {
+  Statement body;
+  Statement finalizer;
+}
+
+class Throw extends Expression {
+  Expression expression;
+}
+```
+
+### Labels and Jumps
+
+```dart
+class LabeledStatement extends Statement {
+  Statement body;
+}
+
+class BreakStatement extends Statement {
+  LabeledStatement target;
+}
+
+class ContinueSwitchStatement extends Statement {
+  SwitchCase target;
+}
+```
+
+### Async
+
+```dart
+class YieldStatement extends Statement {
+  Expression expression;
+  bool isYieldStar;
+}
+
+class AwaitExpression extends Expression {
+  Expression operand;
+}
+```
+
+## DartType Hierarchy
+
+Kernel uses a type system separate from the Dart type system:
+
+```dart
+abstract class DartType extends Node {}
+
+class DynamicType extends DartType {}
+class VoidType extends DartType {}
+class NeverType extends DartType {
+  Nullability nullability;
+}
+class NullType extends DartType {}
+class InvalidType extends DartType {}
+
+class InterfaceType extends DartType {
+  Class classNode;
+  List<DartType> typeArguments;
+  Nullability nullability;
+}
+
+class FunctionType extends DartType {
+  List<TypeParameter> typeParameters;
+  List<DartType> positionalParameters;
+  List<NamedType> namedParameters;
+  DartType returnType;
+  Nullability nullability;
+}
+
+class TypeParameterType extends DartType {
+  TypeParameter parameter;
+  Nullability nullability;
+}
+
+class RecordType extends DartType {
+  List<DartType> positional;
+  List<NamedType> named;
+  Nullability nullability;
+}
+
+class ExtensionType extends DartType {
+  ExtensionTypeDeclaration extensionTypeDeclaration;
+  List<DartType> typeArguments;
+  DartType typeErasure;
+  Nullability nullability;
+}
+```
+
+### Nullability
+
+```dart
+enum Nullability {
+  nullable,      // T?
+  nonNullable,   // T (in null-safe code)
+  neither,       // T (in legacy code)
+}
+```
+
+## Visitors
+
+Kernel provides visitor infrastructure for traversing the AST:
+
+```dart
+abstract class Visitor<R> {
+  R visitComponent(Component node);
+  R visitLibrary(Library node);
+  R visitClass(Class node);
+  R visitField(Field node);
+  R visitProcedure(Procedure node);
+  // ... methods for all node types
+}
+
+abstract class RecursiveVisitor extends Visitor<void> {
+  // Default implementation visits all children
+}
+
+abstract class Transformer extends TreeVisitor<TreeNode> {
+  // Enables AST transformations
+}
+```
+
+## Constants
+
+Compile-time constants have their own representation:
+
+```dart
+abstract class Constant extends Node {}
+
+class NullConstant extends Constant {}
+class BoolConstant extends Constant { bool value; }
+class IntConstant extends Constant { int value; }
+class DoubleConstant extends Constant { double value; }
+class StringConstant extends Constant { String value; }
+
+class ListConstant extends Constant {
+  DartType typeArgument;
+  List<Constant> entries;
+}
+
+class MapConstant extends Constant {
+  DartType keyType;
+  DartType valueType;
+  List<ConstantMapEntry> entries;
+}
+
+class InstanceConstant extends Constant {
+  Class classNode;
+  List<DartType> typeArguments;
+  Map<Field, Constant> fieldValues;
+}
+```
+
+## Usage Examples
+
+### Traversing the AST
+
+```dart
+class PrintingVisitor extends RecursiveVisitor {
+  int depth = 0;
+  
+  @override
+  void visitClass(Class node) {
+    print('${'  ' * depth}class ${node.name}');
+    depth++;
+    super.visitClass(node);
+    depth--;
+  }
+  
+  @override
+  void visitProcedure(Procedure node) {
+    print('${'  ' * depth}${node.kind.name} ${node.name}');
+  }
+}
+```
+
+### Transforming the AST
+
+```dart
+class RemoveAsserts extends Transformer {
+  @override
+  TreeNode visitAssertStatement(AssertStatement node) {
+    return EmptyStatement();
+  }
+}
+```
+
+## Related Topics
+
+- [Kernel Overview](/api/kernel-overview) - Binary format and structure
+- [Kernel Transformations](/api/kernel-transformations) - Transformation infrastructure
+- [Type Checker](https://github.com/dart-lang/sdk/blob/main/pkg/kernel/lib/type_checker.dart) - Type checking implementation

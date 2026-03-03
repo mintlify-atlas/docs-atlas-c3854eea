@@ -1,0 +1,313 @@
+---
+title: dart2js - Dart-to-JavaScript Compiler
+description: Compile Dart to optimized JavaScript for production web applications
+---
+
+The `dart2js` compiler translates Dart code into optimized JavaScript for deployment in web browsers. It's designed for production use, offering aggressive optimizations including tree-shaking, minification, and deferred loading.
+
+## Overview
+
+`dart2js` is a whole-program compiler that performs global analysis and optimization to produce fast, compact JavaScript output. Unlike dartdevc, which prioritizes development speed, dart2js focuses on production-ready output with minimal file size and maximum runtime performance.
+
+### Architecture
+
+The compiler operates in several phases:
+
+1. **Common Front-End** - Parsing, type checking, and Kernel AST generation
+2. **Tree-Shake and Create World** - Determine reachable code using Rapid Type Analysis (RTA)
+3. **Global Analysis** - Type inference and data flow analysis across method boundaries
+4. **Code Generation** - Build SSA graph, optimize, and emit JavaScript
+5. **Link Tree-Shake** - Second round of tree-shaking after optimizations
+6. **Emit JavaScript** - Assemble final program with minified names
+
+## Basic Usage
+
+### Command Line
+
+Compile a Dart application to JavaScript:
+
+```bash
+dart compile js -o output.js input.dart
+```
+
+With optimizations:
+
+```bash
+dart compile js -O2 -o output.js input.dart
+```
+
+### Common Options
+
+| Option | Description |
+|--------|-------------|
+| `-o, --output=<file>` | Output file path |
+| `-O0, -O1, -O2, -O3, -O4` | Optimization level (default: O2) |
+| `--minify` | Minify output (enabled by default in production) |
+| `--no-minify` | Disable minification |
+| `--no-source-maps` | Don't generate source maps |
+| `-D<name>=<value>` | Define environment variable |
+
+## Optimization Levels
+
+<Tabs>
+  <Tab title="O0 - No Optimization">
+    Minimal optimization for debugging:
+    
+    ```bash
+    dart compile js -O0 -o debug.js app.dart
+    ```
+    
+    - Fastest compilation
+    - Largest output size
+    - Best for debugging
+    - Preserves code structure
+  </Tab>
+  
+  <Tab title="O1 - Size Optimization">
+    Optimize for code size:
+    
+    ```bash
+    dart compile js -O1 -o small.js app.dart
+    ```
+    
+    - Skip optimizations that increase code size
+    - Smaller output than O2
+    - May be slower than O2
+  </Tab>
+  
+  <Tab title="O2 - Default">
+    Balanced optimization (default):
+    
+    ```bash
+    dart compile js -O2 -o app.js app.dart
+    ```
+    
+    - Good balance of speed and size
+    - Recommended for production
+    - Includes tree-shaking and inlining
+  </Tab>
+  
+  <Tab title="O3 - Speed Optimization">
+    Aggressive optimization for speed:
+    
+    ```bash
+    dart compile js -O3 -o fast.js app.dart
+    ```
+    
+    - Prioritizes execution speed
+    - May increase code size
+    - More expensive analysis
+  </Tab>
+  
+  <Tab title="O4 - Maximum Optimization">
+    Maximum optimization with unsafe assumptions:
+    
+    ```bash
+    dart compile js -O4 -o fastest.js app.dart
+    ```
+    
+    - Trust implicit downcasts
+    - Fastest execution
+    - Use only if well-tested
+  </Tab>
+</Tabs>
+
+## Advanced Features
+
+### Deferred Loading
+
+Split your application into smaller chunks that load on demand:
+
+```dart
+// main.dart
+import 'heavy_library.dart' deferred as heavy;
+
+Future<void> loadFeature() async {
+  await heavy.loadLibrary();
+  heavy.expensiveOperation();
+}
+```
+
+Compile with deferred loading:
+
+```bash
+dart compile js -o app.js main.dart
+```
+
+This generates:
+- `app.js` - Main bundle
+- `app.js_1.part.js` - Deferred chunk for heavy_library
+
+### Source Maps
+
+Generate source maps for debugging:
+
+```bash
+dart compile js -o app.js --source-maps main.dart
+```
+
+This produces:
+- `app.js` - Compiled JavaScript
+- `app.js.map` - Source map for debugging
+
+### Environment Variables
+
+Define compile-time constants:
+
+```bash
+dart compile js -DAPI_URL=https://api.example.com -o app.js main.dart
+```
+
+```dart
+const apiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://localhost');
+```
+
+## Compiler Pragmas
+
+dart2js supports pragmas to control compilation behavior:
+
+### Inline Control
+
+```dart
+// Force inlining
+@pragma('dart2js:tryInline')
+void frequentFunction() {
+  // Hot path code
+}
+
+// Prevent inlining
+@pragma('dart2js:noInline')
+void debugOnlyFunction() {
+  // Code that should not be inlined
+}
+
+// Disable inlining within a function
+@pragma('dart2js:disable-inlining')
+void noInlineCallsHere() {
+  // Calls inside won't be inlined
+}
+```
+
+### Runtime Checks
+
+```dart
+// Trust casts (unsafe)
+@pragma('dart2js:as:trust')
+T unsafeCast<T>(Object? o) => o as T;
+
+// Trust downcasts
+@pragma('dart2js:downcast:trust')
+void trustImplicitDowncasts(dynamic value) {
+  String s = value; // No runtime check
+}
+
+// Trust late field initialization
+@pragma('dart2js:late:trust')
+late final String cachedValue;
+```
+
+### Optimization Hints
+
+```dart
+// Allow common subexpression elimination
+@pragma('dart2js:allow-cse')
+external String getConstantValue();
+
+// Allow dead code elimination
+@pragma('dart2js:allow-dce')
+external void logDebugInfo();
+```
+
+See the [complete pragma documentation](https://github.com/dart-lang/sdk/blob/main/pkg/compiler/doc/pragmas.md) for all available annotations.
+
+## Performance Tips
+
+### Tree-Shaking
+
+dart2js automatically removes unused code. Help it by:
+
+```dart
+// Bad: Imports everything
+import 'package:huge_library/huge_library.dart';
+
+// Good: Import only what you need
+import 'package:huge_library/specific_module.dart';
+```
+
+### Type Annotations
+
+Provide types for better optimization:
+
+```dart
+// Less optimizable
+var list = [];
+
+// Better
+final List<int> list = [];
+```
+
+### Avoid Dynamic
+
+Dynamic calls prevent optimization:
+
+```dart
+// Slow: dynamic call
+void process(dynamic obj) {
+  obj.method(); // Can't be optimized
+}
+
+// Fast: typed call
+void process(MyClass obj) {
+  obj.method(); // Can be inlined and optimized
+}
+```
+
+## Debugging Compiled Output
+
+### Analyze Output Size
+
+Use dump-info to understand code size:
+
+```bash
+dart compile js --dump-info -o app.js main.dart
+dart run dart2js_info:info_explorer app.js.info.json
+```
+
+### Readable Output
+
+Generate more readable JavaScript:
+
+```bash
+dart compile js -O0 --no-minify -o readable.js main.dart
+```
+
+## Migration from dart2js Command
+
+Legacy `dart2js` command is deprecated. Use `dart compile js` instead:
+
+<Tabs>
+  <Tab title="Old (Deprecated)">
+    ```bash
+    dart2js -O2 --out=app.js main.dart
+    ```
+  </Tab>
+  
+  <Tab title="New (Recommended)">
+    ```bash
+    dart compile js -O2 -o app.js main.dart
+    ```
+  </Tab>
+</Tabs>
+
+## Limitations
+
+- **No dart:io** - JavaScript runtime doesn't support file system operations
+- **No dart:mirrors** - Reflection is not supported for code size reasons
+- **No dart:ffi** - Foreign Function Interface unavailable in JavaScript
+- **Integer precision** - JavaScript numbers are 64-bit floats; use `BigInt` for large integers
+
+## Related Resources
+
+- [dart2js source code](https://github.com/dart-lang/sdk/tree/main/pkg/compiler)
+- [Web deployment guide](https://dart.dev/web/deployment)
+- [Build config for web](https://dart.dev/tools/build_runner)

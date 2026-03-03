@@ -1,0 +1,276 @@
+---
+title: Object Model and Memory Layout
+description: Detailed documentation of Dart VM object representation, memory layout, and tagging schemes
+---
+
+The Dart VM uses a sophisticated object model to efficiently represent Dart objects in memory with support for precise garbage collection.
+
+## Object Pointer Tagging
+
+Object pointers use the low bits as tags to distinguish between immediate and heap objects:
+
+| Pointer Type | Tag | Description |
+|--------------|-----|-------------|
+| **Smi** (Small Integer) | `0` | Immediate value, not heap-allocated |
+| **Heap Object** | `1` | Pointer to heap-allocated object |
+
+The tag encoding allows:
+- **Smi operations** without untagging/retagging (tag of 0)
+- **Heap access** with no penalty (tag removed via offset folding)
+
+### Pointer Examples
+
+```
+0x00000002 → Small integer 1
+0xFFFFFFFE → Small integer -1
+0x00A00001 → Heap object at 0x00A00000 (old-space)
+0x00B00005 → Heap object at 0x00B00004 (new-space)
+```
+
+## Smi (Small Integer)
+
+Smis are immediate objects representing signed integers:
+
+- **31-bit** values on 32-bit platforms
+- **63-bit** values on 64-bit platforms  
+- Upper bits contain the value
+- Least significant bit is `0` (tag)
+
+Smis are a VM-internal type and a subtype of Dart's `int` type.
+
+## Heap Object Layout
+
+Heap objects are always allocated in **double-word increments** with specific alignment:
+
+- **Old-space objects** - Double-word aligned (`address % double-word == 0`)
+- **New-space objects** - Offset from double-word (`address % double-word == word`)
+
+This alignment scheme allows:
+- Checking object age without comparing boundary addresses
+- Scavenger can skip immediates and old objects with a single branch
+
+### Object Header
+
+Every heap object has a single-word header containing:
+
+- **Class ID** - Index into the class table
+- **Size** - Object size in the heap
+- **Status flags** - GC marks, remembered set bits, etc.
+- **Identity hash** - 32-bit hash (on 64-bit platforms; separate table on 32-bit)
+
+Header bits include:
+
+```cpp
+enum HeaderBits {
+  kNotMarkedBit,                 // Incremental barrier target
+  kNewOrEvacuationCandidateBit,  // Generational barrier target
+  kAlwaysSetBit,                 // Incremental barrier source
+  kOldAndNotRememberedBit,       // Generational barrier source
+  ...
+};
+```
+
+## Class Identification
+
+### Class ID (CID)
+
+A **class ID** is an integer that uniquely identifies a class within an isolate:
+
+- Smaller than a full pointer to the class
+- Never changes due to GC (unlike pointers)
+- Build-time constant for well-known classes
+- Used in type feedback (ICData) and optimizations
+
+Also called _class tag_ or _class index_.
+
+### Class Table
+
+The class ID from an object's header is an index into the **class table** - an array of `Class` objects representing all loaded Dart classes.
+
+## Object Representation
+
+VM object definitions are split into two parts:
+
+1. **`Xyz` class** in `runtime/vm/object.h` - C++ methods and high-level interface
+2. **`UntaggedXyz` class** in `runtime/vm/raw_object.h` - Actual memory layout
+
+Examples:
+- `dart::Class` + `dart::UntaggedClass` - Dart class metadata
+- `dart::Field` + `dart::UntaggedField` - Dart field within a class
+- `dart::Function` + `dart::UntaggedFunction` - Dart function/method
+
+## Type Representation
+
+The runtime type of an instance is determined by:
+
+1. **Smi objects** - Implicitly the non-nullable `Smi` type
+2. **Heap objects**:
+   - Extract `ClassIdTag` from header
+   - Get `Class` object from class table
+   - Read `type_arguments` field at known offset (if generic)
+   - Build type from class + type arguments
+
+### Special Case: Closures
+
+For `Closure` instances, the runtime type is not `Closure` but a **function type**:
+
+- The `function` field points to the associated `Function` object
+- The `signature` field in `Function` represents the function type
+- This type is instantiated in the closure's context
+
+## Type Objects
+
+### Type
+
+Simple Dart types are represented by `Type` objects containing:
+
+- `type_class_id` - Class of this type
+- `arguments` - Type argument vector (if generic)
+- `nullability` - `legacy`, `nullable`, or `non-nullable`
+- `hash` - Cached hash code
+- `state` - Finalization state
+
+### FunctionType
+
+Function signatures are represented by `FunctionType` objects containing:
+
+- Type parameters and their bounds (if generic)
+- Result type
+- Parameter types
+- Named parameter names
+- Required parameter flags
+
+### TypeParameter
+
+Type parameters (like `T` in `class C<T>`) are represented by `TypeParameter` objects:
+
+- `index` - Index into type argument vector for instantiation
+- Indicates if class or function type parameter
+
+### TypeArguments
+
+A `TypeArguments` object is a vector of `AbstractType` instances:
+
+- Not a type itself, but the generic component of a type
+- `null` type arguments = vector of `dynamic` of appropriate length
+- Shared and canonicalized to save memory
+
+## Type Argument Flattening
+
+The VM **flattens** type argument vectors across the class hierarchy:
+
+```dart
+class B<X> {
+  bar() => X;
+}
+class C<T> extends B<List<T>> {
+  foo() => T;
+}
+
+main() {
+  var c = C<bool>();
+  // c's type arguments: [List<bool>, bool]
+  // Index 0 = X in B, Index 1 = T in C
+}
+```
+
+The flattened vector `[List<bool>, bool]` allows both `B.bar()` and `C.foo()` to access the correct type arguments using their respective indices.
+
+### Type Argument Overlapping
+
+When type arguments repeat, they are **overlapped** to save space:
+
+```dart
+class B<X> {}
+class C<T> extends B<T> {}
+
+// Instead of [T, T], use [T]
+// Both X and T have index 0
+```
+
+More complex example:
+
+```dart
+class B<R, S> {}
+class C<T> extends B<List<T>, T> {}
+
+// Vector: [List<T>, T] (not [List<T>, T, T])
+// B has 2 type parameters, 2 type arguments
+// C has 1 type parameter, 2 type arguments
+```
+
+## Compressed Pointers
+
+On 64-bit platforms with limited memory (mobile devices), pointers can be compressed to 32 bits:
+
+- Heap restricted to 4GB-aligned region
+- **Store**: Drop upper 32 bits
+- **Load**: Add heap base to decompress
+
+Memory savings: 20-30% reduction in heap size
+
+### Smi-Corrupting Strategy
+
+Decompressing unconditionally adds the heap base, so Smi values get corrupted upper bits:
+
+| Operation | Uncompressed | Compressed |
+|-----------|--------------|------------|
+| Load pointer | `ldr x0, [x1, #9]` | `ldr w0, [x1, #9]`<br/>`add x0, x0, x28` |
+| Store pointer | `str x0, [x1, #9]` | `str w0, [x1, #9]` |
+| Smi add | `add x0, x1, x2` | `add w0, w1, w2` (32-bit) |
+| Smi compare | `cmp x0, x1` | `cmp w0, w1` (32-bit) |
+
+<Warning>
+Compressed pointers require using 32-bit operations for Smi comparisons and arithmetic since the upper bits are garbage.
+</Warning>
+
+### Compressed Pointer Limitations
+
+- **ObjectPool remains uncompressed** - Saves net code size
+- All isolate groups share the same 4GB region
+- Read-only data deserialized into heap (not lazy-loaded from snapshots)
+
+## Handles
+
+The Dart VM GC is **precise** and **moving**:
+
+- **Precise** - Knows exactly what is a pointer vs. unboxed value
+- **Moving** - Object addresses can change during GC
+
+Foreign languages (including C++ runtime) reference Dart objects through **handles**:
+
+- Handles are pointers-to-pointers
+- Allocated from the VM
+- GC visits and updates pointers in handles during collection
+- Required because the VM doesn't know which foreign stack slots/globals contain Dart pointers
+
+## Finalization
+
+Types loaded from Kernel files require **finalization**:
+
+1. Assign indices to type parameters
+2. Flatten type argument vectors
+3. Canonicalize types and type argument vectors
+
+Canonicalization benefits:
+- Minimizes memory usage
+- Optimizes type tests (pointer equality works for canonical types)
+- Enables type test caching
+
+## Object Pool (Literal Pool)
+
+Generated code references constants through an **object pool**:
+
+- Set of objects and raw bits used as constants
+- JIT: Per-function pools
+- AOT: Global pool
+- Accessed via **PP** (pool pointer) register
+
+## Key Source Files
+
+- `runtime/vm/object.h` - Object C++ interfaces (`Xyz` classes)
+- `runtime/vm/raw_object.h` - Object memory layouts (`UntaggedXyz` classes)  
+- `runtime/vm/class_table.h` - Class ID table
+- `runtime/vm/heap/` - Heap and GC implementation
+- `runtime/docs/types.md` - Detailed type system documentation
+- `runtime/docs/compressed-pointers.md` - Compressed pointer details

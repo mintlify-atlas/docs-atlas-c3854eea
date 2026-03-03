@@ -1,0 +1,466 @@
+---
+title: 'Dart DevTools'
+description: 'Debugging and performance profiling suite for Dart and Flutter'
+icon: 'wrench'
+---
+
+Dart DevTools is a suite of debugging and performance tools for Dart and Flutter applications. It provides a web-based interface for inspecting, debugging, and profiling your running applications.
+
+## Overview
+
+DevTools provides:
+- **Debugger** - Set breakpoints, step through code, inspect variables
+- **Performance** - CPU profiling, timeline views, frame analysis
+- **Memory** - Heap snapshots, memory allocation tracking
+- **Network** - HTTP request/response monitoring
+- **Logging** - Application logging and diagnostics
+- **App Inspector** - Widget tree inspection (Flutter)
+
+## Usage
+
+```bash
+dart devtools [options] [service-protocol-uri]
+```
+
+## Starting DevTools
+
+### Standalone Mode
+
+Launch DevTools without connecting to an app:
+
+```bash
+# Start DevTools server
+dart devtools
+
+# Output:
+# Serving DevTools at http://127.0.0.1:9100
+```
+
+Then manually connect to a running Dart VM service.
+
+### Connect to Running App
+
+Connect DevTools to a running application:
+
+<CodeGroup>
+```bash Auto-Connect
+# Run app with VM service enabled
+dart run --observe=8181 bin/main.dart
+
+# In another terminal, launch DevTools
+dart devtools http://127.0.0.1:8181
+```
+
+```bash Flutter App
+# DevTools opens automatically with Flutter
+flutter run
+# Press 'v' to open DevTools
+```
+</CodeGroup>
+
+## Command-Line Options
+
+### Server Options
+
+```bash
+# Specify host
+dart devtools --host=localhost
+
+# Specify port
+dart devtools --port=9100
+
+# Allow remote connections
+dart devtools --host=0.0.0.0 --port=9100
+```
+
+### Connection Options
+
+```bash
+# Connect to VM service
+dart devtools http://127.0.0.1:8181
+
+# Connect via WebSocket
+dart devtools ws://127.0.0.1:8181/ws
+
+# Headless mode (server only, no browser)
+dart devtools --no-launch-browser
+```
+
+### Advanced Options
+
+```bash
+# Enable verbose logging
+dart devtools --verbose
+
+# Try ports in range if specified port is unavailable
+dart devtools --port=9100 --try-ports=10
+
+# Custom DevTools build
+dart devtools --custom-devtools-path=/path/to/devtools
+```
+
+## Features
+
+### Debugger
+
+Debug running Dart applications:
+
+**Features:**
+- Set breakpoints
+- Step through code (step in, step over, step out)
+- Inspect variables and call stacks
+- Evaluate expressions
+- View console output
+
+**Usage:**
+
+1. Run app with debugger enabled:
+   ```bash
+   dart run --observe=8181 bin/main.dart
+   ```
+
+2. Open DevTools:
+   ```bash
+   dart devtools http://127.0.0.1:8181
+   ```
+
+3. Navigate to the **Debugger** tab
+4. Set breakpoints by clicking line numbers
+5. Step through code using controls
+
+### Performance Profiling
+
+Analyze CPU performance:
+
+**Features:**
+- CPU flame charts
+- Timeline events
+- Frame rendering analysis
+- Bottom-up and call tree views
+
+**Usage:**
+
+```bash
+# Run with profiling enabled
+dart run --observe=8181 --profile bin/main.dart
+```
+
+**Profiling workflow:**
+1. Open DevTools Performance tab
+2. Click **Record** to start profiling
+3. Perform the operations you want to profile
+4. Click **Stop** to end profiling
+5. Analyze the flame chart and call tree
+
+### Memory Profiling
+
+Track memory allocation and usage:
+
+**Features:**
+- Heap snapshots
+- Memory allocation timeline
+- Object retention analysis
+- Memory leak detection
+
+**Usage:**
+
+1. Open DevTools Memory tab
+2. Take a snapshot:
+   - Click **Snapshot** to capture current memory state
+3. Analyze objects:
+   - View object counts by class
+   - Inspect object references
+   - Compare snapshots to find leaks
+
+**Memory leak detection:**
+
+```bash
+# Take baseline snapshot
+# Perform operations
+# Take another snapshot
+# Compare to find retained objects
+```
+
+### Network Monitoring
+
+Monitor HTTP traffic:
+
+**Features:**
+- Request/response logging
+- Headers inspection
+- Response body viewing
+- Timing information
+
+**Requirements:**
+- Uses `dart:io` HttpClient or `package:http`
+- Automatically tracks HTTP requests
+
+**Usage:**
+
+1. Open DevTools Network tab
+2. Make HTTP requests in your app
+3. Inspect requests in the network panel
+4. View headers, body, and timing
+
+### Logging
+
+View application logs and diagnostics:
+
+**Features:**
+- Structured logging
+- Log level filtering
+- Search and filter logs
+- Export logs
+
+**Usage:**
+
+```dart
+import 'dart:developer' as developer;
+
+void main() {
+  developer.log('Application started');
+  developer.log('Debug info', name: 'debug');
+  developer.log('Error occurred', name: 'error', level: 1000);
+}
+```
+
+View logs in DevTools Logging tab.
+
+## Connecting to Apps
+
+### Local Development
+
+<CodeGroup>
+```bash Dart CLI App
+# Terminal 1: Run app with VM service
+dart run --observe=8181 bin/main.dart
+
+# Terminal 2: Launch DevTools
+dart devtools http://127.0.0.1:8181
+```
+
+```bash Flutter App
+# Run Flutter app (DevTools auto-opens)
+flutter run
+
+# Or manually connect
+flutter run --observatory-port=8181
+dart devtools http://127.0.0.1:8181
+```
+</CodeGroup>
+
+### Remote Debugging
+
+Connect to remote applications:
+
+```bash
+# Run app on remote server
+ssh user@remote-server
+dart run --observe=0.0.0.0:8181 bin/main.dart
+
+# Forward port locally
+ssh -L 8181:localhost:8181 user@remote-server
+
+# Connect DevTools
+dart devtools http://127.0.0.1:8181
+```
+
+### Production Debugging
+
+**Warning**: Only enable VM service in production with proper security:
+
+```bash
+# Use authentication token
+dart run --observe=8181/<auth-token> bin/main.dart
+
+# Connect with token
+dart devtools http://127.0.0.1:8181/<auth-token>
+```
+
+## Integration
+
+### VS Code
+
+DevTools integrates with VS Code:
+
+1. Install Dart extension
+2. Run app in debug mode: `F5`
+3. Click **Open DevTools** in debug toolbar
+
+### IntelliJ IDEA / Android Studio
+
+DevTools integrates with IntelliJ:
+
+1. Run app in debug mode
+2. Click **Open DevTools** in debug panel
+3. Or use **Run** → **Open DevTools**
+
+### Chrome DevTools Extension
+
+Use Chrome DevTools for Dart:
+
+```bash
+# Enable Dart debugging in Chrome
+flutter run -d chrome --web-renderer html
+```
+
+## Advanced Usage
+
+### Custom DevTools Build
+
+Use a custom DevTools build:
+
+```bash
+# Build DevTools from source
+git clone https://github.com/flutter/devtools.git
+cd devtools/packages/devtools
+flutter pub get
+flutter build web
+
+# Use custom build
+dart devtools --custom-devtools-path=devtools/packages/devtools/build/web
+```
+
+### Headless Mode
+
+Run DevTools server without opening browser:
+
+```bash
+# Start server only
+dart devtools --no-launch-browser --port=9100
+
+# Connect manually by visiting:
+# http://localhost:9100
+```
+
+### DDS (Dart Development Service)
+
+DevTools uses DDS for enhanced debugging:
+
+- Automatic connection pooling
+- Service extensions
+- Enhanced logging
+
+DDS starts automatically when using `--observe`.
+
+## Performance Tips
+
+### CPU Profiling
+
+1. **Profile mode**: Use `--profile` flag for accurate profiling
+   ```bash
+   dart run --observe --profile bin/main.dart
+   ```
+
+2. **Focus on hot paths**: Look for wide bars in flame charts
+
+3. **Bottom-up view**: Find most expensive functions
+
+4. **Export profiles**: Save profiles for later analysis
+
+### Memory Profiling
+
+1. **Baseline snapshots**: Take snapshot before operations
+
+2. **Force GC**: Trigger garbage collection before snapshots
+
+3. **Compare snapshots**: Find memory leaks
+
+4. **Filter by class**: Focus on specific object types
+
+### Network Optimization
+
+1. **Monitor request sizes**: Large payloads affect performance
+
+2. **Check timing**: Identify slow requests
+
+3. **Batch requests**: Reduce number of HTTP calls
+
+4. **Cache responses**: Avoid redundant requests
+
+## Examples
+
+### Debug a CLI Application
+
+```bash
+# Terminal 1: Run app with debugger
+dart run --enable-vm-service --pause-isolates-on-start bin/main.dart
+
+# Terminal 2: Open DevTools
+dart devtools
+
+# In DevTools:
+# 1. Connect to VM service URI
+# 2. Navigate to Debugger tab
+# 3. Set breakpoints
+# 4. Resume execution
+```
+
+### Profile Performance
+
+```bash
+# Run in profile mode
+dart run --observe --profile bin/main.dart
+
+# Open DevTools
+dart devtools http://127.0.0.1:8181
+
+# In Performance tab:
+# 1. Click Record
+# 2. Run the code path to profile
+# 3. Click Stop
+# 4. Analyze flame chart
+```
+
+### Find Memory Leaks
+
+```bash
+# Run app
+dart run --observe bin/main.dart
+
+# Open DevTools Memory tab
+dart devtools http://127.0.0.1:8181
+
+# Workflow:
+# 1. Take baseline snapshot
+# 2. Perform operations
+# 3. Force GC (if possible)
+# 4. Take another snapshot  
+# 5. Compare snapshots
+# 6. Look for unexpected retained objects
+```
+
+## Troubleshooting
+
+### DevTools Won't Start
+
+```bash
+# Check if port is in use
+lsof -i :9100
+
+# Use different port
+dart devtools --port=9101
+```
+
+### Can't Connect to App
+
+```bash
+# Verify VM service is running
+curl http://127.0.0.1:8181/
+
+# Check for DDS redirect
+curl -v http://127.0.0.1:8181/
+```
+
+### Performance Issues
+
+1. Close unused tabs in DevTools
+2. Disable source maps if not debugging
+3. Clear timeline data regularly
+4. Use headless mode for server-only usage
+
+## See Also
+
+- [DevTools Documentation](https://docs.flutter.dev/development/tools/devtools/overview) - Official DevTools guide
+- [VM Service Protocol](https://github.com/dart-lang/sdk/blob/main/runtime/vm/service/service.md) - VM service specification
+- [Debugging Dart](https://dart.dev/tools/dart-devtools) - Debugging techniques

@@ -1,0 +1,193 @@
+---
+title: Runtime System Overview
+description: Overview of the Dart VM runtime system architecture, execution modes, and core components
+---
+
+The Dart VM runtime system provides the execution environment for Dart code natively. It includes object management, garbage collection, isolate management, and multiple execution modes.
+
+## Runtime Components
+
+The Dart VM runtime consists of several key components:
+
+- **Object Model** - Heap object representation and memory layout
+- **Garbage Collection** - Generational GC with parallel scavenge and concurrent mark-sweep
+- **Snapshots** - Serialization of heap state for fast startup
+- **Core libraries native methods** - Native implementations of dart:core APIs
+- **Development Experience** - Debugging, profiling, hot-reload via service protocol
+- **Compilation Pipelines** - JIT and AOT compilation
+- **Interpreter** - Bytecode execution (optional)
+- **ARM Simulators** - Cross-architecture testing
+
+## Execution Modes
+
+The Dart VM supports multiple ways to execute code:
+
+### JIT Mode (Just-in-Time)
+
+Code is compiled from source or Kernel binary at runtime:
+
+1. **From Source via JIT** - Dart source → CFE → Kernel binary → VM execution
+2. **AppJIT Snapshots** - Pre-warmed snapshots with JIT-compiled code and type feedback
+
+JIT mode provides:
+- Fast development iteration
+- Peak performance after warmup
+- Speculative optimizations based on runtime profile
+- Ability to deoptimize when assumptions are violated
+
+### AOT Mode (Ahead-of-Time)
+
+Code is compiled to native machine code before execution:
+
+1. **From AppAOT Snapshots** - Fully compiled snapshots with native code
+2. **Precompiled Runtime** - Stripped VM without JIT compiler
+
+AOT mode provides:
+- Fast startup with no warmup
+- Consistent performance
+- Smaller runtime footprint
+- Required for platforms that prohibit JIT compilation
+
+<Warning>
+AOT compilation performs global static analysis and cannot make speculative assumptions. This means peak performance may be lower than JIT, but startup is much faster.
+</Warning>
+
+## Isolates and Isolate Groups
+
+All Dart code runs within an **isolate** - an isolated execution environment with its own:
+
+- Global state and memory
+- Mutator thread (usually)
+- Message queue for communication
+
+Isolates are grouped into **isolate groups** that share:
+
+- The same GC-managed heap
+- The same Dart program code
+- Compiled code and internal VM structures
+
+```
+┌──────────────────────────────────┐
+│ IsolateGroup                     │
+│                                  │
+│ ╭──────────────────────────────╮ │
+│ │ GC managed Heap              │ │
+│ ╰──────────────────────────────╯ │
+│  ┌─────────┐     ┌─────────┐    │
+│  │Isolate  │     │Isolate  │    │
+│  │         │     │         │    │
+│  │ globals │     │ globals │    │
+│  │ mutator │     │ mutator │    │
+│  │ thread  │     │ thread  │    │
+│  └─────────┘     └─────────┘    │
+└──────────────────────────────────┘
+```
+
+<Warning>
+Isolates within a group cannot share mutable state directly. They communicate only through message passing via ports.
+</Warning>
+
+## Thread Management
+
+The relationship between OS threads and isolates:
+
+- An OS thread can enter only **one isolate at a time**
+- Only **one mutator thread** can be associated with an isolate at a time
+- Multiple helper threads may assist (GC threads, background compiler)
+
+Helper threads include:
+- Background JIT compiler thread
+- GC sweeper threads  
+- Concurrent GC marker threads
+
+The VM uses a thread pool (`dart::ThreadPool`) to manage OS threads efficiently.
+
+## Compilation Pipeline
+
+### Unoptimizing Compiler
+
+When a function is first called:
+
+1. Kernel AST → Unoptimized IL (Intermediate Language)
+2. IL → Machine code (direct one-to-many lowering)
+
+Goals:
+- Compile quickly
+- Collect type feedback via inline caches
+- No optimizations applied
+
+### Optimizing Compiler
+
+When a function becomes hot (execution counter threshold reached):
+
+1. Kernel AST → Unoptimized IL
+2. Unoptimized IL → SSA-based Optimized IL
+3. Apply optimizations (inlining, type propagation, etc.)
+4. Optimized IL → Machine code
+
+Optimizations include:
+- **Inlining** - Reduce call overhead
+- **Range analysis** - Eliminate bounds checks
+- **Type propagation** - Use type feedback
+- **Representation selection** - Unbox values
+- **Load forwarding** - Eliminate redundant loads
+- **Global value numbering** - Eliminate redundant computations
+- **Allocation sinking** - Eliminate temporary allocations
+
+### On-Stack Replacement (OSR)
+
+For long-running loops, execution can switch from unoptimized to optimized code while the function is running. The stack frame is transparently replaced.
+
+## Deoptimization
+
+Optimized code makes speculative assumptions based on type feedback. When assumptions are violated:
+
+1. **Eager deoptimization** - Inline checks fail (e.g., `CheckSmi`, `CheckClass`)
+2. **Lazy deoptimization** - Global guards trigger (e.g., class hierarchy changes)
+
+Deoptimization transfers execution to the corresponding position in unoptimized code, which can handle all cases.
+
+<Warning>
+The VM usually discards optimized code after deoptimization and will reoptimize later with updated type feedback.
+</Warning>
+
+## Inline Caching
+
+Dynamic calls use **inline caching** to speed up method resolution:
+
+- Each call site has a cache mapping receiver class → target method
+- Cache includes frequency counters for optimization decisions
+- Shared lookup stub searches cache and calls method if found
+- Cache misses invoke runtime method resolution
+
+Cache states:
+- **Monomorphic** - One observed type (fastest)
+- **Polymorphic** - Few observed types (fast)
+- **Megamorphic** - Many observed types (slower)
+
+## Snapshots
+
+Snapshots serialize the heap object graph to binary format for fast startup:
+
+- **Kernel snapshots** - Serialized Kernel AST only
+- **AppJIT snapshots** - Heap + JIT-compiled code + type feedback
+- **AppAOT snapshots** - Heap + AOT-compiled native code
+
+Snapshots-with-code include a code section that can be directly mapped into memory without deserialization.
+
+## Performance Characteristics
+
+| Mode | Startup | Peak Performance | Code Size | Use Case |
+|------|---------|------------------|-----------|----------|
+| JIT | Medium | Highest | Medium | Development |
+| AppJIT | Fast | High | Medium | CLI tools |
+| AOT | Fastest | High | Smallest | Production mobile |
+
+## Key Source Files
+
+- `runtime/vm/object.h` - Object definitions (C++ methods)
+- `runtime/vm/raw_object.h` - Object memory layout (`UntaggedXyz` classes)
+- `runtime/vm/isolate.h` - Isolate implementation
+- `runtime/vm/heap/heap.h` - Heap management
+- `runtime/vm/compiler/` - Compilation pipeline
+- `runtime/vm/runtime_entry.cc` - Runtime system entry points

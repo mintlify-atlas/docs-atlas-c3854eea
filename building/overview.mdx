@@ -1,0 +1,132 @@
+---
+title: Building Overview
+description: Overview of building the Dart SDK from source
+---
+
+The Dart SDK can be built from source for various platforms and architectures. This section provides comprehensive guides for building the SDK for your target platform.
+
+<Warning>
+You must follow the instructions for getting the source code before attempting to build. Just cloning a GitHub repo or downloading and unpacking a ZIP of the SDK repository will not work.
+</Warning>
+
+## What You'll Need
+
+Before building the Dart SDK, ensure you have:
+
+- Python 3 installed on your system
+- Chromium's depot_tools installed and in your PATH
+- Platform-specific build tools (see [Dependencies](/building/dependencies))
+- The complete Dart source tree (not just a git clone)
+
+## Build Process Overview
+
+Building the Dart SDK involves these general steps:
+
+<Steps>
+  <Step title="Install dependencies">
+    Set up platform-specific build tools, Python 3, and depot_tools.
+  </Step>
+  
+  <Step title="Get the source">
+    Use `fetch dart` to download the complete source tree with all dependencies.
+  </Step>
+  
+  <Step title="Build the SDK">
+    Run the build script with your target configuration (architecture, mode, platform).
+  </Step>
+  
+  <Step title="Test the build">
+    Verify your build works correctly using the test suite.
+  </Step>
+</Steps>
+
+## Basic Build Command
+
+The most common build command creates a release SDK for your platform:
+
+```bash
+cd sdk
+./tools/build.py --mode release create_sdk
+```
+
+## Build Output Locations
+
+The build output location varies by platform:
+
+- **Linux**: `out/ReleaseX64/dart-sdk`
+- **Windows**: `out/ReleaseX64/dart-sdk`
+- **macOS**: `xcodebuild/ReleaseARM64/dart-sdk`
+
+## Common Build Options
+
+### Architecture
+
+Specify the target architecture with `--arch` or `-a`:
+
+```bash
+./tools/build.py --arch=arm64 create_sdk
+./tools/build.py -a x64 create_sdk
+```
+
+Supported architectures: `x64`, `arm`, `arm64`, `riscv64`
+
+### Build Mode
+
+Choose between debug and release modes with `--mode` or `-m`:
+
+```bash
+./tools/build.py --mode=release create_sdk  # Optimized build
+./tools/build.py --mode=debug create_sdk    # Debug symbols
+./tools/build.py --mode=all create_sdk      # Both modes
+```
+
+### Build Targets
+
+- `create_sdk` - Full Dart SDK (most common)
+- `runtime` - Standalone VM only (faster build)
+- `most` - Most build targets (for testing)
+
+## Platform-Specific Guides
+
+For detailed platform-specific instructions, see:
+
+- [Building for ARM and RISC-V](/building/for-arm-risc-v)
+- [Building for Android](/building/for-android)
+- [Building for Fuchsia](/building/for-fuchsia)
+
+## Build Performance Tips
+
+### Local File System
+
+We recommend using a local file system for build output. If your code is on NFS, link the output directory locally:
+
+```bash
+cd sdk/
+mkdir -p /usr/local/dart-out/
+ln -s -f /usr/local/dart-out/ out
+```
+
+### Build Notifications
+
+On Mac and Linux, you can get a notification when long builds complete:
+
+```bash
+export DART_BUILD_NOTIFICATION_DELAY=60  # Notify if build takes >60s
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Dependencies" icon="wrench" href="/building/dependencies">
+    Install required build dependencies
+  </Card>
+  <Card title="Build from Source" icon="hammer" href="/building/from-source">
+    Complete step-by-step build instructions
+  </Card>
+  <Card title="ARM/RISC-V" icon="microchip" href="/building/for-arm-risc-v">
+    Build for ARM and RISC-V processors
+  </Card>
+  <Card title="Android" icon="mobile" href="/building/for-android">
+    Build the Dart VM for Android
+  </Card>
+</CardGroup>

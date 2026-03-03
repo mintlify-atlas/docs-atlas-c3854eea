@@ -1,0 +1,578 @@
+---
+title: dart:io
+description: File, socket, HTTP, and I/O support for non-web applications
+---
+
+The `dart:io` library provides file, socket, HTTP, and other I/O support for non-web applications. This library is only available for Dart Native platforms (servers, command-line scripts, Flutter mobile and desktop apps).
+
+<Warning>
+**Important:** Browser-based apps cannot use this library. The dart:io library is only available on:
+- Servers
+- Command-line scripts  
+- Flutter mobile apps
+- Flutter desktop apps
+</Warning>
+
+## Overview
+
+To use this library in your code:
+
+```dart
+import 'dart:io';
+```
+
+The dart:io library includes:
+- File system operations (File, Directory, Link)
+- Network I/O (Socket, HttpServer, HttpClient)
+- Process management
+- Standard I/O streams (stdin, stdout, stderr)
+
+## File System
+
+### File
+
+<ParamField path="File" type="class">
+  A reference to a file on the file system. Provides methods for reading, writing, and manipulating files.
+</ParamField>
+
+<Accordion title="File Operations">
+
+```dart
+import 'dart:io';
+
+// Creating a file reference
+var file = File('example.txt');
+
+// Check if file exists
+if (await file.exists()) {
+  print('File exists');
+}
+
+// Read file as string
+var contents = await file.readAsString();
+print(contents);
+
+// Read file as bytes
+var bytes = await file.readAsBytes();
+
+// Read file as lines
+var lines = await file.readAsLines();
+for (var line in lines) {
+  print(line);
+}
+
+// Write to file (overwrites existing content)
+await file.writeAsString('Hello, World!');
+
+// Append to file
+await file.writeAsString('\nNew line', mode: FileMode.append);
+
+// Write bytes
+await file.writeAsBytes([65, 66, 67]);  // ABC
+
+// Copy file
+var copy = await file.copy('backup.txt');
+
+// Rename/move file
+var renamed = await file.rename('new_name.txt');
+
+// Delete file
+await file.delete();
+
+// Get file info
+var stat = await file.stat();
+print('Size: ${stat.size} bytes');
+print('Modified: ${stat.modified}');
+print('Type: ${stat.type}');
+```
+
+**Synchronous versions:**
+```dart
+// Synchronous operations (blocks execution)
+var contents = file.readAsStringSync();
+file.writeAsStringSync('Hello');
+file.deleteSync();
+```
+
+</Accordion>
+
+### Directory
+
+<ParamField path="Directory" type="class">
+  A reference to a directory on the file system. Provides methods for creating, listing, and managing directories.
+</ParamField>
+
+<Accordion title="Directory Operations">
+
+```dart
+// Creating a directory reference
+var dir = Directory('my_directory');
+
+// Create directory
+await dir.create();
+
+// Create directory with parent directories
+await dir.create(recursive: true);
+
+// Check if directory exists
+if (await dir.exists()) {
+  print('Directory exists');
+}
+
+// List directory contents
+await for (var entity in dir.list()) {
+  if (entity is File) {
+    print('File: ${entity.path}');
+  } else if (entity is Directory) {
+    print('Directory: ${entity.path}');
+  }
+}
+
+// List recursively
+await for (var entity in dir.list(recursive: true)) {
+  print(entity.path);
+}
+
+// List only files
+var files = dir.list()
+    .where((entity) => entity is File)
+    .map((entity) => entity as File);
+
+// Delete directory (must be empty)
+await dir.delete();
+
+// Delete directory and contents
+await dir.delete(recursive: true);
+
+// Rename directory
+var renamed = await dir.rename('new_name');
+
+// Get current directory
+var current = Directory.current;
+print('Current directory: ${current.path}');
+
+// Change current directory
+Directory.current = '/path/to/new/directory';
+
+// Get system temp directory
+var temp = Directory.systemTemp;
+var tempDir = await temp.createTemp('myapp_');
+```
+
+</Accordion>
+
+### FileSystemEntity
+
+<ParamField path="FileSystemEntity" type="abstract class">
+  Base class for File, Directory, and Link. Provides common file system operations.
+</ParamField>
+
+```dart
+// Check type of path
+var path = 'some/path';
+if (await FileSystemEntity.isFile(path)) {
+  print('Path is a file');
+} else if (await FileSystemEntity.isDirectory(path)) {
+  print('Path is a directory');
+} else if (await FileSystemEntity.isLink(path)) {
+  print('Path is a link');
+}
+
+// Get entity type
+var type = await FileSystemEntity.type(path);
+if (type == FileSystemEntityType.file) {
+  var file = File(path);
+}
+
+// Check if path exists
+if (await FileSystemEntity.type(path) != FileSystemEntityType.notFound) {
+  print('Path exists');
+}
+
+// Get parent directory
+var file = File('/path/to/file.txt');
+var parent = file.parent;  // Directory('/path/to')
+```
+
+### Stream Reading/Writing
+
+```dart
+// Read file as stream
+var file = File('large_file.txt');
+var stream = file.openRead();
+
+await for (var chunk in stream) {
+  // chunk is List<int>
+  print('Read ${chunk.length} bytes');
+}
+
+// Read with transform
+import 'dart:convert';
+
+var lines = file.openRead()
+    .transform(utf8.decoder)
+    .transform(LineSplitter());
+
+await for (var line in lines) {
+  print(line);
+}
+
+// Write file as stream
+var sink = file.openWrite(mode: FileMode.append);
+sink.write('Line 1\n');
+sink.write('Line 2\n');
+await sink.flush();
+await sink.close();
+```
+
+## HTTP
+
+### HttpServer
+
+<ParamField path="HttpServer" type="abstract class">
+  A simple HTTP server. For production applications, consider using packages like shelf or aqueduct.
+</ParamField>
+
+<Accordion title="HTTP Server Example">
+
+```dart
+import 'dart:io';
+import 'dart:convert';
+
+void main() async {
+  // Start server
+  var server = await HttpServer.bind(
+    InternetAddress.loopbackIPv4,
+    8080,
+  );
+  
+  print('Server running on http://localhost:8080');
+  
+  // Handle requests
+  await for (var request in server) {
+    handleRequest(request);
+  }
+}
+
+void handleRequest(HttpRequest request) {
+  var response = request.response;
+  
+  // Log request
+  print('${request.method} ${request.uri.path}');
+  
+  // Route handling
+  switch (request.uri.path) {
+    case '/':
+      response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentType = ContentType.html
+        ..write('<h1>Hello, World!</h1>');
+      break;
+      
+    case '/api/data':
+      response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentType = ContentType.json
+        ..write(jsonEncode({'status': 'ok', 'data': [1, 2, 3]}));
+      break;
+      
+    default:
+      response
+        ..statusCode = HttpStatus.notFound
+        ..write('Not found');
+  }
+  
+  response.close();
+}
+```
+
+</Accordion>
+
+### HttpClient
+
+<ParamField path="HttpClient" type="class">
+  HTTP client for making requests. For most applications, use the http package instead.
+</ParamField>
+
+```dart
+import 'dart:io';
+import 'dart:convert';
+
+// Create client
+var client = HttpClient();
+
+try {
+  // GET request
+  var request = await client.getUrl(Uri.parse('https://api.example.com/data'));
+  var response = await request.close();
+  
+  if (response.statusCode == 200) {
+    var body = await response.transform(utf8.decoder).join();
+    var data = jsonDecode(body);
+    print(data);
+  }
+  
+  // POST request
+  var postRequest = await client.postUrl(Uri.parse('https://api.example.com/users'));
+  postRequest.headers.contentType = ContentType.json;
+  postRequest.write(jsonEncode({
+    'name': 'John Doe',
+    'email': 'john@example.com',
+  }));
+  
+  var postResponse = await postRequest.close();
+  print('Status: ${postResponse.statusCode}');
+  
+} finally {
+  client.close();
+}
+```
+
+## Sockets
+
+### Socket
+
+<ParamField path="Socket" type="abstract class">
+  TCP socket for network communication.
+</ParamField>
+
+```dart
+// TCP Server
+var serverSocket = await ServerSocket.bind(
+  InternetAddress.anyIPv4,
+  4040,
+);
+
+print('Server listening on port 4040');
+
+await for (var client in serverSocket) {
+  handleClient(client);
+}
+
+void handleClient(Socket client) {
+  print('Client connected: ${client.remoteAddress}:${client.remotePort}');
+  
+  client.listen(
+    (data) {
+      // Received data
+      print('Received: ${String.fromCharCodes(data)}');
+      
+      // Echo back
+      client.add(data);
+    },
+    onDone: () {
+      print('Client disconnected');
+      client.close();
+    },
+  );
+}
+
+// TCP Client
+var socket = await Socket.connect('localhost', 4040);
+socket.write('Hello, Server!');
+
+socket.listen(
+  (data) => print('Received: ${String.fromCharCodes(data)}'),
+  onDone: () => socket.close(),
+);
+```
+
+## Process
+
+<ParamField path="Process" type="class">
+  Runs a native process on the host system.
+</ParamField>
+
+<Accordion title="Process Management">
+
+```dart
+import 'dart:io';
+import 'dart:convert';
+
+// Run process and wait for completion
+var result = await Process.run('ls', ['-la']);
+print('Exit code: ${result.exitCode}');
+print('Output:\n${result.stdout}');
+if (result.stderr.isNotEmpty) {
+  print('Error:\n${result.stderr}');
+}
+
+// Start process with streaming output
+var process = await Process.start('find', ['.', '-name', '*.dart']);
+
+// Stream stdout
+process.stdout
+    .transform(utf8.decoder)
+    .transform(LineSplitter())
+    .listen((line) => print('Found: $line'));
+
+// Stream stderr
+process.stderr
+    .transform(utf8.decoder)
+    .listen((line) => print('Error: $line'));
+
+// Wait for exit
+var exitCode = await process.exitCode;
+print('Process exited with code $exitCode');
+
+// Kill process
+process.kill();
+
+// Run with environment variables
+var customEnv = await Process.start(
+  'printenv',
+  [],
+  environment: {'CUSTOM_VAR': 'value'},
+);
+
+// Run in different directory
+var inDir = await Process.start(
+  'pwd',
+  [],
+  workingDirectory: '/tmp',
+);
+```
+
+</Accordion>
+
+## Standard I/O
+
+### stdin, stdout, stderr
+
+<ParamField path="stdin" type="Stdin">
+  Standard input stream for reading user input.
+</ParamField>
+
+<ParamField path="stdout" type="Stdout">
+  Standard output stream for writing output.
+</ParamField>
+
+<ParamField path="stderr" type="Stdout">
+  Standard error stream for writing error messages.
+</ParamField>
+
+```dart
+import 'dart:io';
+import 'dart:convert';
+
+// Write to stdout
+stdout.write('Enter your name: ');
+
+// Read from stdin
+var name = stdin.readLineSync();
+print('Hello, $name!');
+
+// Read as stream
+stdout.write('Enter lines (Ctrl+D to end):\n');
+await stdin
+    .transform(utf8.decoder)
+    .transform(LineSplitter())
+    .forEach((line) => print('You entered: $line'));
+
+// Write to stderr
+stderr.writeln('This is an error message');
+
+// Exit program
+exit(0);  // Success
+exit(1);  // Error
+```
+
+## Platform Information
+
+<ParamField path="Platform" type="class">
+  Information about the platform and environment.
+</ParamField>
+
+```dart
+import 'dart:io';
+
+// Operating system
+if (Platform.isLinux) print('Running on Linux');
+if (Platform.isMacOS) print('Running on macOS');
+if (Platform.isWindows) print('Running on Windows');
+if (Platform.isAndroid) print('Running on Android');
+if (Platform.isIOS) print('Running on iOS');
+
+// System information
+print('OS: ${Platform.operatingSystem}');
+print('Version: ${Platform.operatingSystemVersion}');
+print('Hostname: ${Platform.localHostname}');
+print('Processors: ${Platform.numberOfProcessors}');
+
+// Path separator
+var pathSep = Platform.pathSeparator;  // '/' on Unix, '\\' on Windows
+
+// Environment variables
+var path = Platform.environment['PATH'];
+var home = Platform.environment['HOME'];
+
+// Executable path
+print('Dart executable: ${Platform.executable}');
+print('Script: ${Platform.script}');
+```
+
+## Path Manipulation
+
+```dart
+import 'dart:io';
+
+// Join paths
+var filePath = Directory.current.path + Platform.pathSeparator + 'file.txt';
+
+// Better: use package:path
+import 'package:path/path.dart' as path;
+
+var joined = path.join('directory', 'subdirectory', 'file.txt');
+var absolute = path.absolute('relative/path');
+var dirname = path.dirname('/path/to/file.txt');  // '/path/to'
+var basename = path.basename('/path/to/file.txt');  // 'file.txt'
+var extension = path.extension('file.txt');  // '.txt'
+```
+
+## Best Practices
+
+<Warning>
+1. **Prefer async methods** over sync methods to avoid blocking
+2. **Always close resources** (files, sockets, HTTP clients) when done
+3. **Handle errors** with try-catch blocks
+4. **Use streams** for large files to avoid loading everything into memory
+5. **Validate paths** before file operations to prevent security issues
+</Warning>
+
+<Tip>
+**For production HTTP servers**, use packages like [shelf](https://pub.dev/packages/shelf) or [aqueduct](https://pub.dev/packages/aqueduct) instead of dart:io directly. For HTTP clients, use [package:http](https://pub.dev/packages/http).
+</Tip>
+
+## Common Patterns
+
+```dart
+// Safe file operations with error handling
+Future<String?> safeReadFile(String path) async {
+  try {
+    var file = File(path);
+    if (await file.exists()) {
+      return await file.readAsString();
+    }
+  } catch (e) {
+    print('Error reading file: $e');
+  }
+  return null;
+}
+
+// Resource cleanup with try-finally
+Future<void> processFile(String path) async {
+  var file = File(path).openWrite();
+  try {
+    file.write('data');
+    await file.flush();
+  } finally {
+    await file.close();
+  }
+}
+```
+
+## Related Resources
+
+- [File and Directory I/O](https://dart.dev/tutorials/server/cmdline) - Official tutorial
+- [package:path](https://pub.dev/packages/path) - Cross-platform path manipulation
+- [package:http](https://pub.dev/packages/http) - Better HTTP client

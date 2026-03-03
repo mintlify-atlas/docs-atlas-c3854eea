@@ -1,0 +1,262 @@
+---
+title: Build Dependencies
+description: Required dependencies and tools for building the Dart SDK
+---
+
+This guide covers all the dependencies you need to install before building the Dart SDK from source.
+
+## Python
+
+Dart SDK requires Python 3 to build.
+
+<Warning>
+On Windows, ensure that `python.bat` wrapper from `depot_tools` comes ahead of any other Python binaries in your PATH. Some steps still require Python 2 on Windows, but Python 3 must also be available.
+</Warning>
+
+## Platform-Specific Dependencies
+
+<Tabs>
+  <Tab title="Linux">
+    ### Install Build Tools
+
+    Install the essential build tools:
+
+    ```bash
+    sudo apt-get install git python3 curl xz-utils
+    ```
+
+    ### Install Depot Tools
+
+    Chromium's depot_tools are required for managing the Dart source tree:
+
+    ```bash
+    git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+    export PATH="$PATH:$PWD/depot_tools"
+    ```
+
+    <Note>
+    Add the export command to your shell's rc file (`.bashrc`, `.zshrc`, etc.) to make it permanent.
+    </Note>
+  </Tab>
+
+  <Tab title="macOS">
+    ### Install Xcode
+
+    Install Xcode from the Mac App Store.
+
+    <Warning>
+    If you encounter the error:
+    ```
+    xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer directory
+    '/Library/Developer/CommandLineTools' is a command line tools instance
+    ```
+    
+    Run this command to fix it:
+    ```bash
+    sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+    ```
+    </Warning>
+
+    ### Install Depot Tools
+
+    Install Chromium's depot_tools:
+
+    ```bash
+    git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+    export PATH="$PATH:$PWD/depot_tools"
+    ```
+
+    <Note>
+    Add the export command to your shell's rc file (`.bashrc`, `.zshrc`, etc.) to make it permanent.
+    </Note>
+  </Tab>
+
+  <Tab title="Windows">
+    ### Install Visual Studio
+
+    Install [Visual Studio](https://chromium.googlesource.com/chromium/src/+/main/docs/windows_build_instructions.md#visual-studio) 2017 or newer.
+
+    <Note>
+    Make sure to install the "Desktop development with C++" component during installation.
+    </Note>
+
+    ### Install Windows 10 SDK
+
+    You must have Windows 10 SDK installed. This can be installed:
+    - Through the Visual Studio installer, or
+    - As a standalone download
+
+    ### Install SDK Debugging Tools
+
+    The SDK Debugging Tools are also required:
+
+    **Via Visual Studio installer:**
+    1. Open Control Panel → Programs → Programs and Features
+    2. Select "Windows Software Development Kit"
+    3. Click Change → Change
+    4. Check "Debugging Tools For Windows"
+    5. Click Change
+
+    **Via standalone installer:**
+    Download and use the standalone SDK installer.
+
+    ### Install Depot Tools
+
+    Follow the [depot_tools setup instructions](http://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up) for Windows.
+
+    ### Configure Environment Variables
+
+    <Warning>
+    **Important for non-Googlers:** Set the `DEPOT_TOOLS_WIN_TOOLCHAIN` system variable to `0`.
+    
+    Otherwise, depot_tools will attempt to pull down a Google-internal toolchain instead of using your local Visual Studio installation.
+    </Warning>
+
+    ### Visual Studio Community Edition
+
+    If using Visual Studio Community Edition, the executable may have a different name. Pass the executable name to the build script:
+
+    ```bash
+    python tools/build.py --executable=VSExpress.exe create_sdk
+    ```
+
+    ### Visual Studio 2015
+
+    Gyp should auto-detect your Visual Studio version. If it doesn't, set the environment variable:
+
+    ```bash
+    set gyp_msvs_version=2015
+    gclient runhooks
+    ```
+  </Tab>
+</Tabs>
+
+## Cross-Compilation Dependencies
+
+### Linux Cross-Compilers
+
+For cross-compiling to different architectures on Debian/Ubuntu:
+
+```bash
+# To target x64
+sudo apt-get install g++-x86-64-linux-gnu
+
+# To target arm
+sudo apt-get install g++-arm-linux-gnueabihf
+
+# To target arm64
+sudo apt-get install g++-aarch64-linux-gnu
+
+# To target riscv64
+sudo apt-get install g++-riscv64-linux-gnu
+```
+
+<Note>
+The build scripts download a Clang toolchain that can target X64, ARM, ARM64, or RISCV64 from an X64 or ARM64 host. You only need to install cross-compilers manually for other cases, like building on a RISC-V host or targeting RISCV32.
+</Note>
+
+### Android Dependencies
+
+To build for Android, update your `.gclient` file:
+
+```python
+"custom_vars": {
+  "download_android_deps": True,
+},
+```
+
+Then run:
+
+```bash
+gclient sync
+```
+
+This downloads the Android NDK and SDK (may take 10+ minutes).
+
+### Fuchsia Dependencies
+
+To build for Fuchsia, update your `.gclient` file:
+
+```python
+"custom_vars": {
+  "download_fuchsia_deps": True,
+},
+```
+
+Then run:
+
+```bash
+gclient sync
+```
+
+## Optional Dependencies
+
+### Emscripten
+
+If you don't have Emscripten but need it, update your `.gclient` file:
+
+```python
+"custom_vars": {
+  "download_emscripten": True,
+},
+```
+
+Then run `gclient sync`.
+
+## Verifying Your Setup
+
+After installing dependencies, verify your setup:
+
+```bash
+# Check Python version
+python3 --version
+
+# Check depot_tools is in PATH
+which gclient  # Linux/macOS
+where gclient  # Windows
+
+# Check git is available
+git --version
+```
+
+## Managing Third-Party Dependencies
+
+The Dart SDK uses `gclient` to manage dependencies described in the `DEPS` file.
+
+<Note>
+When you switch branches or update your SDK checkout, run `gclient sync` to bring dependencies in sync with the SDK version.
+</Note>
+
+### Adding New Dependencies
+
+<Warning>
+New dependencies require explicit approval from Dart leadership before being added to the DEPS file, unless they are [Dart core packages](https://pub.dev/publishers/dart.dev/packages).
+</Warning>
+
+When adding dependencies:
+
+1. File an issue in the Dart SDK repo for approval
+2. Ensure the license is compatible with Dart's license
+3. Add a `README.google` file describing the dependency
+4. Include a LICENSE file with the actual license
+5. CC dart-engprod@google.com on the change
+
+### Updating Dependencies
+
+To roll a specific dependency:
+
+```bash
+dart tools/manage_deps.dart bump third_party/pkg/package_config
+```
+
+To roll all package dependencies:
+
+```bash
+dart tools/rev_sdk_deps.dart
+```
+
+## Next Steps
+
+<Card title="Build from Source" icon="hammer" href="/building/from-source">
+  Now that you have the dependencies installed, proceed to build the SDK from source.
+</Card>

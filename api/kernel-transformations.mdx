@@ -1,0 +1,545 @@
+---
+title: Kernel Transformations
+description: Guide to kernel-to-kernel transformations and the transformation infrastructure in the Dart SDK
+---
+
+Kernel transformations are passes that modify the AST to implement language features, perform optimizations, or prepare code for specific backends. This page covers the transformation infrastructure and common transformations in the Dart SDK.
+
+## Transformation Infrastructure
+
+### Transformer Base Class
+
+The `Transformer` class is the foundation for AST transformations:
+
+```dart
+abstract class Transformer extends TreeVisitor<TreeNode> {
+  // Transform methods for each node type
+  TreeNode visitLibrary(Library node) => node;
+  TreeNode visitClass(Class node) => node;
+  TreeNode visitProcedure(Procedure node) => node;
+  TreeNode visitField(Field node) => node;
+  // ... and so on for all node types
+  
+  // Helper methods
+  void transformList(List<TreeNode> nodes, TreeNode parent);
+  DartType visitDartType(DartType type) => type;
+}
+```
+
+### Visitor Pattern
+
+Transformers use the visitor pattern to traverse and modify the AST:
+
+```dart
+class MyTransformer extends Transformer {
+  @override
+  TreeNode visitProcedure(Procedure node) {
+    // Transform the procedure
+    node.transformChildren(this);
+    return node;
+  }
+}
+```
+
+### RecursiveVisitor
+
+For read-only traversal, use `RecursiveVisitor`:
+
+```dart
+class AnalysisVisitor extends RecursiveVisitor {
+  @override
+  void visitClass(Class node) {
+    print('Visiting class: ${node.name}');
+    super.visitClass(node);
+  }
+}
+```
+
+## Transformation Flags
+
+Transformation flags help optimize passes by indicating what types of nodes are present:
+
+```dart
+class TransformerFlag {
+  // The class or member contains 'super' calls
+  static const int superCalls = 1 << 0;
+  
+  // Temporary flag used by the verifier
+  static const int seenByVerifier = 1 << 1;
+}
+```
+
+These flags are set by the frontend and deserializer to speed up transformations.
+
+## Common Transformations
+
+### Mixin Application Resolution
+
+Mixin applications are transformed into regular classes:
+
+**Before:**
+```dart
+class A extends B with M {}
+```
+
+**After (conceptual):**
+```dart
+class _A&B&M = B with M;
+class A extends _A&B&M {}
+```
+
+Implementation: `pkg/kernel/lib/transformations/mixin_full_resolution.dart`
+
+### Constructor Tearoff Lowering
+
+Constructor tearoffs are lowered to synthetic static methods:
+
+**Before:**
+```dart
+var constructor = MyClass.new;
+```
+
+**After:**
+```dart
+// Synthetic static method created
+static MyClass _#new#tearOff() => MyClass();
+var constructor = _#new#tearOff;
+```
+
+Implementation: `pkg/kernel/lib/constructor_tearoff_lowering.dart`
+
+### Late Variable Initialization
+
+Late variables are transformed to use backing fields and initialization checks:
+
+**Before:**
+```dart
+late String value;
+```
+
+**After (conceptual):**
+```dart
+String? _value; // backing field
+String get value {
+  if (_value == null) throw LateInitializationError();
+  return _value!;
+}
+set value(String val) => _value = val;
+```
+
+Implementation: `pkg/vm/lib/modular/transformations/late_var_init_transformer.dart`
+
+### For-In Lowering
+
+For-in loops are lowered to iterator-based loops:
+
+**Before:**
+```dart
+for (var item in items) {
+  print(item);
+}
+```
+
+**After (conceptual):**
+```dart
+var iterator = items.iterator;
+while (iterator.moveNext()) {
+  var item = iterator.current;
+  print(item);
+}
+```
+
+Implementation: `pkg/vm/lib/modular/transformations/for_in_lowering.dart`
+
+### List Literals Lowering
+
+List literals may be lowered for specific backends:
+
+**Before:**
+```dart
+var list = [1, 2, 3];
+```
+
+**After (VM):**
+```dart
+var list = _GrowableList._literal3(1, 2, 3);
+```
+
+Implementation: `pkg/vm/lib/modular/transformations/list_literals_lowering.dart`
+
+## VM-Specific Transformations
+
+The VM performs additional transformations for optimization:
+
+### Devirtualization
+
+Converts virtual calls to direct calls when the target is known:
+
+```dart
+class CHADevirtualization extends Devirtualization {
+  // Uses Class Hierarchy Analysis to determine
+  // when a method call can be devirtualized
+}
+```
+
+**Example:**
+```dart
+// If 'obj' is known to be exactly type 'Foo'
+obj.method(); // Virtual call
+
+// Can be transformed to:
+Foo.method(obj); // Direct static call
+```
+
+Implementation: `pkg/vm/lib/transformations/devirtualization.dart`
+
+### Type Casts Optimization
+
+Removes redundant type casts:
+
+```dart
+class TypeCastsOptimizer extends Transformer {
+  // Removes unnecessary 'as' casts when type
+  // information proves them redundant
+}
+```
+
+Implementation: `pkg/vm/lib/modular/transformations/type_casts_optimizer.dart`
+
+### Mixin Deduplication
+
+Deduplicates identical mixin applications:
+
+```dart
+class A with M {}
+class B with M {}
+
+// Both can share the same mixin application class
+```
+
+Implementation: `pkg/vm/lib/transformations/mixin_deduplication.dart`
+
+### Call Site Annotation
+
+Annotates call sites with type information for the optimizer:
+
+```dart
+class CallSiteAnnotator extends Transformer {
+  // Attaches metadata about receiver types
+  // to help the JIT/AOT compiler
+}
+```
+
+Implementation: `pkg/vm/lib/modular/transformations/call_site_annotator.dart`
+
+## FFI Transformations
+
+Foreign Function Interface (FFI) transformations handle native interop:
+
+### Native Type Transformation
+
+Transforms FFI types to their native representations:
+
+```dart
+class NativeTransformer extends Transformer {
+  // Transforms dart:ffi types like Pointer<T>
+  // to their runtime representations
+}
+```
+
+### Use Site Transformation
+
+Transforms FFI call sites:
+
+**Before:**
+```dart
+final ptr = Pointer<Int32>.fromAddress(addr);
+final value = ptr.value;
+```
+
+**After:**
+```dart
+final ptr = Pointer<Int32>.fromAddress(addr);
+final value = _loadInt32(ptr);
+```
+
+Implementation: `pkg/vm/lib/modular/transformations/ffi/use_sites.dart`
+
+### Finalizable Transformation
+
+Handles finalizers for native resources:
+
+```dart
+class FinalizableTransformer extends Transformer {
+  // Ensures proper cleanup of native resources
+}
+```
+
+Implementation: `pkg/vm/lib/modular/transformations/ffi/finalizable.dart`
+
+## Pattern Matching Transformations
+
+Pattern matching (Dart 3.0+) is lowered to simpler constructs:
+
+### Switch Expression Lowering
+
+**Before:**
+```dart
+var result = switch (value) {
+  0 => 'zero',
+  1 => 'one',
+  _ => 'other'
+};
+```
+
+**After (conceptual):**
+```dart
+var result;
+if (value == 0) {
+  result = 'zero';
+} else if (value == 1) {
+  result = 'one';
+} else {
+  result = 'other';
+}
+```
+
+### Pattern Destructuring
+
+**Before:**
+```dart
+var (x, y) = point;
+```
+
+**After:**
+```dart
+var x = point.$1;
+var y = point.$2;
+```
+
+## Writing Custom Transformations
+
+### Basic Transformation
+
+```dart
+import 'package:kernel/ast.dart';
+import 'package:kernel/visitor.dart';
+
+class RemoveEmptyBlocks extends Transformer {
+  @override
+  TreeNode visitBlock(Block node) {
+    // First transform children
+    node.transformChildren(this);
+    
+    // If block is empty, replace with EmptyStatement
+    if (node.statements.isEmpty) {
+      return EmptyStatement();
+    }
+    
+    return node;
+  }
+}
+
+// Usage
+void transform(Component component) {
+  component.accept(RemoveEmptyBlocks());
+}
+```
+
+### Collecting Information
+
+```dart
+class FunctionCollector extends RecursiveVisitor {
+  final List<FunctionNode> functions = [];
+  
+  @override
+  void visitFunctionNode(FunctionNode node) {
+    functions.add(node);
+    super.visitFunctionNode(node);
+  }
+}
+
+// Usage
+var collector = FunctionCollector();
+component.accept(collector);
+print('Found ${collector.functions.length} functions');
+```
+
+### Replacing Nodes
+
+```dart
+class ReplaceNullLiterals extends Transformer {
+  @override
+  TreeNode visitNullLiteral(NullLiteral node) {
+    // Replace null with 0
+    return IntLiteral(0)..parent = node.parent;
+  }
+}
+```
+
+### Type-Aware Transformation
+
+```dart
+import 'package:kernel/type_environment.dart';
+
+class TypeAwareTransformer extends Transformer {
+  final TypeEnvironment env;
+  
+  TypeAwareTransformer(this.env);
+  
+  @override
+  TreeNode visitAsExpression(AsExpression node) {
+    node.transformChildren(this);
+    
+    // Get static type of operand
+    var operandType = node.operand.getStaticType(
+      StaticTypeContext.nonNullable(env));
+    
+    // If operand is already the target type, remove cast
+    if (env.isSubtypeOf(operandType, node.type,
+        SubtypeCheckMode.withNullabilities)) {
+      return node.operand;
+    }
+    
+    return node;
+  }
+}
+```
+
+## Transformation Pipeline
+
+Transformations are applied in a specific order:
+
+1. **Frontend transformations** - Applied during compilation
+   - Mixin resolution
+   - Constructor tearoff lowering
+   - Pattern matching lowering
+
+2. **Modular transformations** - Applied per library
+   - Late variable initialization
+   - For-in lowering
+   - FFI transformations
+
+3. **Whole-program transformations** - Applied to entire component
+   - Devirtualization
+   - Tree shaking
+   - Type flow analysis
+
+4. **Backend transformations** - Platform-specific
+   - List literal lowering
+   - Async transformation
+   - Target-specific optimizations
+
+## Best Practices
+
+### Maintain Parent Pointers
+
+```dart
+// Always set parent when creating new nodes
+var newNode = SomeNode()..parent = oldNode.parent;
+return newNode;
+```
+
+### Preserve Source Locations
+
+```dart
+// Copy file offsets from original nodes
+var newNode = SomeNode()
+  ..fileOffset = oldNode.fileOffset
+  ..parent = oldNode.parent;
+```
+
+### Use transformChildren Correctly
+
+```dart
+@override
+TreeNode visitProcedure(Procedure node) {
+  // Transform children first
+  node.transformChildren(this);
+  
+  // Then transform the node itself
+  // ...
+  
+  return node;
+}
+```
+
+### Avoid Modifying During Iteration
+
+```dart
+// Bad: modifying list during iteration
+for (var stmt in block.statements) {
+  block.statements.remove(stmt); // Don't do this!
+}
+
+// Good: collect changes, apply later
+var toRemove = <Statement>[];
+for (var stmt in block.statements) {
+  if (shouldRemove(stmt)) toRemove.add(stmt);
+}
+block.statements.removeWhere(toRemove.contains);
+```
+
+## Testing Transformations
+
+```dart
+import 'package:kernel/kernel.dart';
+import 'package:kernel/ast.dart';
+import 'package:test/test.dart';
+
+void main() {
+  test('transformation removes empty blocks', () {
+    // Create test AST
+    var block = Block([]);
+    var function = FunctionNode(block);
+    
+    // Apply transformation
+    var transformer = RemoveEmptyBlocks();
+    function.accept(transformer);
+    
+    // Verify result
+    expect(function.body, isA<EmptyStatement>());
+  });
+}
+```
+
+## Debugging Transformations
+
+Use the text printer to visualize the AST:
+
+```dart
+import 'package:kernel/text/ast_to_text.dart';
+
+void debugPrintNode(TreeNode node) {
+  var buffer = StringBuffer();
+  Printer(buffer).writeNode(node);
+  print(buffer.toString());
+}
+
+// Usage in transformer
+@override
+TreeNode visitProcedure(Procedure node) {
+  print('Before transformation:');
+  debugPrintNode(node);
+  
+  node.transformChildren(this);
+  
+  print('After transformation:');
+  debugPrintNode(node);
+  
+  return node;
+}
+```
+
+## Related Topics
+
+- [Kernel Overview](/api/kernel-overview) - Binary format and structure
+- [Kernel AST](/api/kernel-ast) - AST node types
+- [Type Environment](https://github.com/dart-lang/sdk/blob/main/pkg/kernel/lib/type_environment.dart) - Type operations
+- [Verifier](https://github.com/dart-lang/sdk/blob/main/pkg/kernel/lib/verifier.dart) - AST validation
+
+## References
+
+- [pkg/kernel/lib/transformations](https://github.com/dart-lang/sdk/tree/main/pkg/kernel/lib/transformations) - Kernel transformations
+- [pkg/vm/lib/transformations](https://github.com/dart-lang/sdk/tree/main/pkg/vm/lib/transformations) - VM transformations
+- [pkg/vm/lib/modular/transformations](https://github.com/dart-lang/sdk/tree/main/pkg/vm/lib/modular/transformations) - Modular transformations

@@ -1,0 +1,167 @@
+---
+title: Managing Dependencies
+description: Guidelines for adding, updating, and rolling dependencies in the Dart SDK
+---
+
+## Third-Party Source Dependencies
+
+<Warning>
+New dependencies need explicit approval from Dart leadership before being added to the Dart SDK `DEPS` file unless they are [Dart core packages](https://pub.dev/publishers/dart.dev/packages). To get approval, file an issue in the Dart SDK repo.
+</Warning>
+
+### License Compatibility
+
+When adding new third-party source dependencies, be very careful:
+
+- Ensure the license for the software is compatible with our license
+- Many licenses are more restrictive when you actually link in the source instead of just using the tools
+- A compiler's license might allow using it to compile our binary, but could be too restrictive to allow using its source code as part of the Dart SDK tool source code
+
+**Requirements:**
+
+- You must add a `README.google` file if you check in third-party code
+- Note any local changes that have been applied to the code
+- CC `dart-engprod@google.com` on any third-party additions
+
+<Note>
+If you need to discuss license issues, reach out to the legal team at Google or talk with `dart-engprod@google.com`. Please refrain from speculating about licenses or making assumptions. If in doubt, ask.
+</Note>
+
+### Using External Repositories
+
+We have rules to ensure we can continue to build older SDK versions even if people delete or rewrite repository history. There are two options for using repositories not hosted under `https://github.com/dart-lang/` or `https://github.com/google/`:
+
+#### Option 1: Move or Fork to dart-lang
+
+Move it to the dart-lang org, or fork it there:
+
+- Moving is better than forking since it avoids fragmented versions
+- If you do fork, state in the README that this is used for pulling in as a DEPS
+- Don't make local changes
+- Don't publish to pub from the dart-lang fork
+
+#### Option 2: Mirror on dart.googlesource.com
+
+Get the GitHub repo mirrored on the dart.googlesource.com git server:
+
+<Warning>
+**For security reasons, all code pulled in to build the Dart SDK must be reviewed by Google employees, no matter where it comes from.** You or a Google employee need to do an initial review of all code up to and including the commit you put in the DEPS file.
+</Warning>
+
+**Requirements:**
+
+- All external packages must be pinned to a fixed commit (revision) in the DEPS file
+- When updating DEPS to pin a newer version, do another review of the changes between the two revisions
+- Upload the review to https://dart-review.googlesource.com and upstream any fixes before pinning the new version
+
+### Setting Up Mirrors
+
+For all dependencies on GitHub, we need a mirror:
+
+1. File a GitHub issue labeled `area-infrastructure` (https://dartbug.com) requesting a mirror
+2. Mirrors go to `https://dart.googlesource.com/external/github.com/<org>/<repo>.git`
+3. Once the mirror is set up, commit your DEPS file changes pointing at the GitHub mirror
+
+<Note>
+While waiting for the mirror, you can add the dependency to DEPS pointing directly to `https://github.com/<org>/<repo>.git` for local development, but don't commit this.
+</Note>
+
+## Rolling Dependencies
+
+Generally, to roll a dependency:
+
+1. Edit the SDK's [DEPS](https://github.com/dart-lang/sdk/blob/main/DEPS) file to reference the new commit for the particular package
+2. Run `gclient sync -D` to bring that commit into your local checkout
+3. Follow the normal contribution process:
+   ```bash
+   git checkout -b roll_dep_foo
+   git add DEPS
+   git commit -m "[deps] update foo dep"
+   git cl upload
+   ```
+
+### Rolling a Specific Dependency
+
+Use the `tools/manage_deps.dart` script. From the SDK top level directory:
+
+```bash
+dart tools/manage_deps.dart bump third_party/pkg/package_config
+```
+
+This will update the DEPS file to the latest commit for the `package_config` dep and optionally create a CL for that change.
+
+### Rolling All Package Dependencies
+
+To roll all Dart packages referenced in the DEPS file to their latest versions:
+
+```bash
+dart tools/rev_sdk_deps.dart
+```
+
+This will modify the DEPS file in-place, updating all the Dart packages deps to their latest versions. You can then create a CL of the changes via the normal contribution process.
+
+## Third-Party Binaries and Binary Data
+
+We occasionally need to add binary versions of tools to make our testing/build/distribution infrastructure easier to maintain.
+
+<Warning>
+Please be absolutely sure that the binary is compatible with our license. Always cc `dart-engprod@google.com` on any third-party additions.
+</Warning>
+
+**Types of binaries:**
+
+- Tools derived from our own source code (like fixed stable versions of the Dart standalone binary)
+- Open source tools (like the standalone Firefox binary)
+
+**Considerations:**
+
+- If your binary is not needed for building/distributing the core dart tool-chain, consider other options (e.g., lazily fetching the files from the source or from Google Cloud Storage)
+- Always be vigilant about the license
+
+### Where Binaries Are Stored
+
+We put third-party binaries on Google Cloud Storage and fetch them using a DEPS hook:
+
+- Pin DEPS entries to the hashes of specific versions
+- Never delete old entries from the bucket (this would destroy our ability to do old builds)
+- This allows a single location holding the binaries for bleeding edge, dev branch, and stable releases
+
+**Preferred method:**
+
+Binary data is preferably added as a CIPD package:
+
+<Note>
+Only a select set of people have access to uploading CIPD packages. If you need access or help, contact `dart-engprod@google.com`.
+</Note>
+
+## README.google Templates
+
+When adding third-party dependencies, you must always add a `README.google` file describing:
+
+- What you put in
+- Which license
+- Which revision if applicable
+- The repository/page where you obtained the source/binary
+- Any local modifications
+
+**Always include a LICENSE file** with the actual license.
+
+### Example README.google
+
+Here's a template based on the Firefox JavaScript shell:
+
+```
+Name: Firefox command line javascript shell.
+Short Name: js-shell
+URL: http://ftp.mozilla.org/pub/mozilla.org/firefox/candidates/15.0.1-candidates/build1/
+Version: 15.0.1
+Date: September 5th 2012
+License: MPL, http://www.mozilla.org/MPL
+
+Description:
+This directory contains the firefox js-shell binaries for Windows, Mac and
+Linux. The files was fetched from:
+http://ftp.mozilla.org/pub/mozilla.org/firefox/candidates/15.0.1-candidates/
+on September 28th 2012.
+The binaries are used for testing dart code compiled to javascript.
+```

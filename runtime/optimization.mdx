@@ -1,0 +1,395 @@
+---
+title: JIT Optimizations and Deoptimization  
+description: Deep dive into the Dart VM's adaptive JIT compilation pipeline, optimization passes, and deoptimization mechanisms
+---
+
+The Dart VM uses **adaptive optimizing compilation** driven by runtime execution profiles to generate high-performance code.
+
+## Compilation Pipeline Overview
+
+The VM has two compilers:
+
+1. **Unoptimizing Compiler** - Fast compilation, collects type feedback
+2. **Optimizing Compiler** - Slower compilation, applies speculative optimizations
+
+## Unoptimizing Compiler
+
+When a function is first called, it's compiled by the unoptimizing compiler:
+
+### Pipeline
+
+```
+Kernel AST → Unoptimized IL → Machine Code
+```
+
+1. **Parse Kernel AST** - Walk serialized function body
+2. **Build CFG** - Generate control flow graph with basic blocks
+3. **Generate IL** - Stack-based intermediate language instructions
+4. **Emit code** - Direct one-to-many lowering to machine code
+
+### Goals
+
+- Compile as quickly as possible
+- No optimizations applied
+- Collect execution profile:
+  - **Inline caches** - Track receiver types at call sites
+  - **Execution counters** - Track hot functions and basic blocks
+
+### Lazy Compilation
+
+All functions initially point to `LazyCompileStub`:
+
+```
+┌──────────┐
+│ Function │
+│          │     LazyCompileStub
+│  code_ ━━━━━━▶ ┌─────────────────────────────┐
+│          │     │ code = CompileFunction(...) │
+└──────────┘     │ return code(...);           │
+                 └─────────────────────────────┘
+```
+
+First invocation triggers compilation, then tail-calls the generated code.
+
+## Inline Caching
+
+Dynamic calls use **inline caching** for fast method resolution:
+
+### Structure
+
+- **ICData object** - Maps receiver class → method + frequency counter
+- **Lookup stub** - Searches cache, increments counter, tail-calls method
+- **Runtime miss handler** - Resolves method, updates cache
+
+### Example
+
+```dart
+class Dog {
+  get face => '🐶';
+}
+
+class Cat {
+  get face => '🐱';
+}
+
+sameFace(animal, face) {
+  animal.face == face;  // Call site with IC
+}
+
+sameFace(Dog(), ...);  // IC: [Dog, Dog.get:face, 1]
+sameFace(Dog(), ...);  // IC: [Dog, Dog.get:face, 2]
+sameFace(Cat(), ...);  // IC: [Dog, Dog.get:face, 2,
+                       //      Cat, Cat.get:face, 1]
+```
+
+### Cache States
+
+- **Monomorphic** - One class observed (fastest)
+- **Polymorphic** - Few classes observed (fast)
+- **Megamorphic** - Many classes observed (slower, switches to different dispatch)
+
+## Optimizing Compiler
+
+When a function's execution counter reaches threshold (`optimization_counter_threshold`), it's submitted to the **background optimizing compiler**.
+
+### Pipeline
+
+```
+Kernel AST → Unoptimized IL → SSA IL → Optimized SSA IL → Machine Code
+```
+
+1. **Build unoptimized IL** - Same as unoptimizing compiler
+2. **Convert to SSA** - Static single assignment form
+3. **Apply optimizations** - Multiple passes using type feedback
+4. **Lower to machine code** - Linear scan register allocation + lowering
+
+### Optimization Passes
+
+Major optimizations include:
+
+#### Inlining
+
+- Replace function calls with function body
+- Reduces call overhead
+- Enables further optimizations
+- Controlled by heuristics (size, depth, hotness)
+
+**Flags:**
+```bash
+--inlining_hotness=<count>              # Call count threshold
+--inlining_size_threshold=<nodes>       # Max caller size
+--inlining_callee_size_threshold=<nodes> # Max callee size  
+--inlining_depth_threshold=<depth>      # Max nesting depth
+--inline_getters_setters_smaller_than=<nodes>
+```
+
+#### Type Propagation
+
+- Propagate type information through IL graph
+- Uses type feedback from inline caches
+- Enables devirtualization and specialization
+
+#### Range Analysis
+
+- Infer integer value ranges
+- Eliminate bounds checks on array access
+- Eliminate overflow checks
+
+#### Representation Selection
+
+- Choose optimal representation (boxed vs unboxed)
+- Unbox integers and doubles where possible
+- Reduces allocation and improves performance
+
+#### Common Subexpression Elimination (CSE)
+
+- Eliminate redundant computations
+- Reuse previously computed values
+
+#### Loop-Invariant Code Motion (LICM)
+
+- Move computations out of loops
+- Reduces work in hot loops
+
+#### Load/Store Forwarding
+
+- Forward stored values to subsequent loads
+- Eliminate redundant memory accesses
+
+#### Global Value Numbering (GVN)
+
+- Identify equivalent computations globally
+- Eliminate duplicates
+
+#### Allocation Sinking
+
+- Delay or eliminate temporary object allocations
+- Move allocations to where actually needed
+
+### Speculative Optimizations
+
+Optimizations based on runtime feedback:
+
+- **Call specialization** - Convert dynamic calls to direct calls based on observed types
+- **Class hierarchy analysis (CHA)** - Use class hierarchy assumptions
+- **Unboxing** - Assume Smi or double based on feedback
+
+<Warning>
+Speculative optimizations require guards to check assumptions. If assumptions fail, code must deoptimize.
+</Warning>
+
+## Deoptimization
+
+When optimized code encounters a case it can't handle, it **deoptimizes** to unoptimized code.
+
+### Types of Deoptimization
+
+#### Eager Deoptimization
+
+Inline checks fail at the use site:
+
+```cpp
+CheckSmi:1(v1)               // Deoptimizes if v1 is not a Smi
+CheckClass:1(v1, Dog)        // Deoptimizes if v1 is not a Dog
+BinarySmiOp:1(+, v1, v2)     // May deopt on overflow
+```
+
+Example:
+
+```dart
+void printAnimal(obj) {
+  print('Animal {');
+  print('  ${obj.toString()}');  // Optimized for Cat
+  print('}');
+}
+
+// Call with Cat 50000 times - optimizes assuming obj is Cat
+for (var i = 0; i < 50000; i++)
+  printAnimal(Cat());
+
+// Call with Dog - optimized code can't handle Dog, deoptimizes
+printAnimal(Dog());
+```
+
+#### Lazy Deoptimization
+
+Global guards trigger when runtime state changes:
+
+- Class finalization adds subclass (violates CHA assumptions)
+- Dynamic code loading invalidates assumptions
+- Runtime finds invalid optimized code on stack
+- Frames marked for deoptimization, applied on return
+
+### Deoptimization Process
+
+1. **Match deopt ID** - Maps optimized code position → unoptimized code position
+2. **Reconstruct state** - Build unoptimized frame(s) from optimized state
+3. **Transfer execution** - Continue in unoptimized code
+4. **Discard optimized code** - Usually discarded, will reoptimize later with updated feedback
+
+### Deopt Instructions
+
+Deoptimization uses mini-interpreter executing **deopt instructions**:
+
+- Generated during compilation at each potential deopt location
+- Describe how to reconstruct unoptimized state from optimized state
+- Handle multiple unoptimized frames from single optimized frame (inlining)
+
+## On-Stack Replacement (OSR)
+
+For long-running loops, switch from unoptimized to optimized code **while function is running**:
+
+1. Loop executes in unoptimized code
+2. Loop back-edge counter reaches threshold  
+3. Background compile optimized version with OSR entry point
+4. On next iteration, jump to optimized code
+5. Stack frame transparently replaced
+
+## Optimization Control Flags
+
+### Compilation Control
+
+```bash
+# Threshold to trigger optimization (-1 = never optimize)
+--optimization_counter_threshold=30000
+
+# Optimization level (1=size, 2=default, 3=speed)
+--optimization_level=2
+
+# Background compilation
+--background_compilation=true
+--no-background-compilation          # Compile on main thread
+
+# OSR (on-stack replacement)
+--use_osr=true
+
+# Deoptimization for testing
+--deoptimize_every=0                 # Deopt every N stack overflow checks
+--deoptimize_alot=false              # Deopt before returning from native
+--deoptimize_on_runtime_call_every=0 # Deopt on every Nth runtime call
+```
+
+### Debugging Output
+
+```bash
+# Print IL for compilations
+--print-flow-graph                   # Print unoptimized IL
+--print-flow-graph-optimized         # Print optimized IL only
+--print-flow-graph-filter=foo,bar    # Limit to functions matching filter
+
+# Disassemble machine code
+--disassemble                        # Disassemble all compiled code
+--disassemble-optimized              # Disassemble optimized code only
+--disassemble-relative               # Use offsets instead of absolute PCs
+
+# Compiler passes
+--compiler-passes=help               # List available passes
+--compiler-passes=[pass1,pass2]      # Run specific passes only
+
+# Trace compilation
+--trace_compiler=false               # Trace all compilations
+--trace_optimizing_compiler=false    # Trace optimizing compilations
+--trace_optimization=false           # Print optimization details  
+--trace_deoptimization=false         # Trace deoptimizations
+--trace_deoptimization_verbose=false # Detailed deopt instruction trace
+
+# Determinism (for benchmarking)
+--deterministic=false                # Disable non-deterministic sources
+```
+
+### Feature Flags
+
+```bash
+# Class hierarchy analysis
+--use_cha_deopt=true                 # Allow CHA to cause deoptimization
+
+# Field tracking
+--use_field_guards=true              # Track field types
+--trace_field_guards=false           # Trace field guard changes
+
+# Inline allocation
+--inline_alloc=true                  # Use inline allocation fast paths
+
+# Other
+--reorder_basic_blocks=true          # Reorder blocks for better cache locality
+--truncating_left_shift=true         # Optimize left shift to truncate
+--polymorphic_with_deopt=true        # Allow polymorphic calls with deopt
+--guess_icdata_cid=true              # Artificially create type feedback
+```
+
+## Optimization Levels
+
+The `--optimization_level` flag controls which optimizations are applied:
+
+### Level 1 (Os - Optimize for Size)
+
+- Skip O2 optimizations that increase code size
+- Introduce optimizations favoring code size over speed
+- Example: Less aggressive inlining
+
+### Level 2 (O2 - Default)
+
+- Balanced compile-time, code speed, and code size
+- All standard optimizations with proper heuristics
+- Default for production
+
+### Level 3 (O3 - Optimize for Speed)  
+
+- More detailed analysis for speed improvements
+- Accept longer compile-time and larger code size
+- More aggressive optimization heuristics
+
+<Warning>
+Optimization levels should not be used as a substitute for proper heuristics. An optimization that improves speed with minimal size increase belongs in O2, not O3.
+</Warning>
+
+## Example: Optimization in Action
+
+```dart
+(a, b) => a + b;
+```
+
+**Unoptimized IL:**
+```
+LoadLocal('a')
+LoadLocal('b')
+InstanceCall('+')
+Return
+```
+
+**After type feedback** (both `a` and `b` observed as Smi):
+
+**Optimized IL:**
+```
+v1 <- Parameter('a')
+v2 <- Parameter('b')
+CheckSmi:1(v1)              // Guard: deopt if not Smi
+CheckSmi:1(v2)              // Guard: deopt if not Smi  
+v3 <- BinarySmiOp:1(+, v1, v2)
+Return(v3)
+```
+
+**Machine code:**
+```asm
+movq rax, [rbp+...]   # Load a
+testq rax, 1          # Check Smi tag
+jnz ->deopt@1         # Deopt if not Smi
+movq rbx, [rbp+...]   # Load b
+testq rbx, 1          # Check Smi tag  
+jnz ->deopt@1         # Deopt if not Smi
+addq rax, rbx         # Add (no tag removal needed!)
+jo ->deopt@1          # Deopt on overflow
+retq
+```
+
+## Key Source Files
+
+- `runtime/vm/compiler/compiler_pass.cc` - Optimization pass pipeline
+- `runtime/vm/compiler/jit/compiler.cc` - JIT compiler entry points
+- `runtime/vm/compiler/jit/jit_call_specializer.cc` - Type feedback specialization
+- `runtime/vm/compiler/backend/il.h` - IL instruction definitions
+- `runtime/vm/compiler/backend/inliner.cc` - Inlining logic
+- `runtime/vm/compiler/backend/range_analysis.cc` - Range analysis
+- `runtime/vm/compiler/backend/type_propagator.cc` - Type propagation
+- `runtime/vm/deopt_instructions.cc` - Deoptimization machinery
+- `runtime/docs/compiler/optimization_levels.md` - Optimization level design

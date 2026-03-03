@@ -1,0 +1,456 @@
+---
+title: 'Dart Analyzer'
+description: 'Static analysis tool for Dart code'
+icon: 'magnifying-glass-chart'
+---
+
+The Dart analyzer performs static analysis on Dart code to identify potential issues, enforce coding standards, and improve code quality.
+
+## Overview
+
+The analyzer examines Dart code without running it, checking for:
+- Syntax errors
+- Type errors
+- Potential runtime errors
+- Coding style violations
+- Best practice recommendations
+
+## Usage
+
+```bash
+dart analyze [options] [<directory>]
+```
+
+If no directory is specified, the analyzer analyzes the current directory.
+
+## Basic Examples
+
+<CodeGroup>
+```bash Analyze Current Directory
+dart analyze
+```
+
+```bash Analyze Specific Directory
+dart analyze lib/
+```
+
+```bash Verbose Output
+dart analyze --verbose
+```
+</CodeGroup>
+
+## Command-Line Options
+
+### Fatal Levels
+
+Control which issue levels should cause the analyzer to exit with an error code:
+
+```bash
+# Treat info-level issues as fatal
+dart analyze --fatal-infos
+
+# Treat warnings as fatal (default: true)
+dart analyze --fatal-warnings
+
+# Don't treat warnings as fatal
+dart analyze --no-fatal-warnings
+```
+
+### Output Formats
+
+The analyzer supports multiple output formats:
+
+<CodeGroup>
+```bash Default Format
+dart analyze
+# Output:
+#   Analyzing my_app...
+#   
+#   error • lib/main.dart:10:5 • Undefined name 'foo' • undefined_name
+#   warning • lib/utils.dart:25:3 • Unused import • unused_import
+#   
+#   2 issues found.
+```
+
+```bash JSON Format
+dart analyze --format=json
+```
+
+```bash Machine Format
+dart analyze --format=machine
+# Output: SEVERITY|TYPE|CODE|FILE|LINE|COLUMN|LENGTH|MESSAGE
+```
+</CodeGroup>
+
+### Advanced Options
+
+```bash
+# Specify package resolution config
+dart analyze --packages=.dart_tool/package_config.json
+
+# Override SDK path
+dart analyze --sdk-path=/path/to/dart-sdk
+
+# Set analysis cache location
+dart analyze --cache=/tmp/analysis-cache
+```
+
+## Configuration
+
+Configure the analyzer using an `analysis_options.yaml` file at the root of your project:
+
+### Basic Configuration
+
+```yaml analysis_options.yaml
+analyzer:
+  exclude:
+    - build/**
+    - '**/*.g.dart'
+  
+  errors:
+    # Treat specific issues as errors
+    unused_import: error
+    unused_local_variable: warning
+    
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+
+linter:
+  rules:
+    - camel_case_types
+    - prefer_const_constructors
+    - avoid_print
+```
+
+### Error Severity Levels
+
+You can configure the severity of specific diagnostics:
+
+- `error` - Treat as an error (blocks compilation)
+- `warning` - Treat as a warning
+- `info` - Treat as an informational message
+- `ignore` - Suppress the diagnostic
+
+```yaml analysis_options.yaml
+analyzer:
+  errors:
+    # Promote warnings to errors
+    invalid_use_of_protected_member: error
+    
+    # Demote errors to warnings
+    unused_element: warning
+    
+    # Suppress specific diagnostics
+    todo: ignore
+```
+
+### Excluding Files and Directories
+
+Exclude files from analysis:
+
+```yaml analysis_options.yaml
+analyzer:
+  exclude:
+    - build/**
+    - '**/*.g.dart'
+    - '**/*.freezed.dart'
+    - test/_data/**
+    - lib/generated/**
+```
+
+Glob patterns are supported (using the [glob package](https://pub.dev/packages/glob)).
+
+### Language Features
+
+Enable strict mode features:
+
+```yaml analysis_options.yaml
+analyzer:
+  language:
+    # Require explicit casts
+    strict-casts: true
+    
+    # Require type inference to succeed
+    strict-inference: true
+    
+    # Disallow raw types (non-generic types)
+    strict-raw-types: true
+```
+
+### Strong Mode
+
+Configure strong mode options (Dart 2.0+):
+
+```yaml analysis_options.yaml
+analyzer:
+  strong-mode:
+    implicit-casts: false
+    implicit-dynamic: false
+```
+
+## Linter Rules
+
+The analyzer includes a comprehensive set of lint rules. Enable rules in `analysis_options.yaml`:
+
+### Recommended Rules
+
+Use a curated set of recommended rules:
+
+```yaml analysis_options.yaml
+include: package:lints/recommended.yaml
+
+linter:
+  rules:
+    # Additional rules beyond recommended
+    - prefer_single_quotes
+    - sort_constructors_first
+```
+
+### Core Lints
+
+Use the core lints package:
+
+```yaml analysis_options.yaml
+include: package:lints/core.yaml
+```
+
+### Custom Rule Configuration
+
+```yaml analysis_options.yaml
+linter:
+  rules:
+    # Style rules
+    - camel_case_types
+    - camel_case_extensions
+    - file_names
+    - non_constant_identifier_names
+    
+    # Documentation rules
+    - package_api_docs
+    - public_member_api_docs
+    
+    # Error rules
+    - avoid_print
+    - avoid_relative_lib_imports
+    - prefer_const_constructors
+    - unnecessary_null_in_if_null_operators
+    
+    # Performance rules
+    - prefer_const_constructors_in_immutables
+    - prefer_const_declarations
+    - prefer_const_literals_to_create_immutables
+```
+
+### Disable Specific Rules
+
+```yaml analysis_options.yaml
+linter:
+  rules:
+    # Explicitly disable rules
+    - avoid_print
+    # Comment out rules to disable them:
+    # - public_member_api_docs
+```
+
+## Output Examples
+
+### Default Output
+
+```bash
+$ dart analyze
+
+Analyzing my_app...
+
+  error • lib/main.dart:15:7 • The name 'unknownFunction' isn't defined. • undefined_name
+  warning • lib/utils.dart:42:1 • Unused import: 'dart:convert' • unused_import
+  info • lib/models/user.dart:10:3 • Document all public members • public_member_api_docs
+
+3 issues found.
+```
+
+### JSON Output
+
+```json
+{
+  "version": 1,
+  "diagnostics": [
+    {
+      "code": "undefined_name",
+      "severity": "ERROR",
+      "type": "COMPILE_TIME_ERROR",
+      "location": {
+        "file": "lib/main.dart",
+        "range": {
+          "start": {"offset": 245, "line": 15, "column": 7},
+          "end": {"offset": 260, "line": 15, "column": 22}
+        }
+      },
+      "problemMessage": "The name 'unknownFunction' isn't defined.",
+      "correctionMessage": "Try correcting the name to one that is defined."
+    }
+  ]
+}
+```
+
+### Machine Output
+
+```
+ERROR|COMPILE_TIME_ERROR|UNDEFINED_NAME|lib/main.dart|15|7|15|The name 'unknownFunction' isn't defined.
+WARNING|HINT|UNUSED_IMPORT|lib/utils.dart|42|1|13|Unused import: 'dart:convert'
+```
+
+## Suppressing Diagnostics
+
+### In Code
+
+Suppress specific diagnostics using comments:
+
+```dart
+// ignore: unused_import
+import 'dart:convert';
+
+void main() {
+  // ignore: avoid_print
+  print('Hello, world!');
+}
+
+// Ignore for the entire file
+// ignore_for_file: prefer_const_constructors
+
+class MyWidget {
+  // ignore: public_member_api_docs
+  final String name;
+}
+```
+
+### Multiple Diagnostics
+
+```dart
+// ignore: unused_import, unnecessary_import
+import 'package:some_package/some_package.dart';
+```
+
+### File-Level Suppression
+
+```dart
+// ignore_for_file: avoid_print, public_member_api_docs
+
+void debugLog(String message) {
+  print(message);  // No warning
+}
+```
+
+## Exit Codes
+
+- `0` - No issues found
+- `1` - Issues found (errors or warnings, depending on configuration)
+- `3` - Analysis completed with fatal issues
+
+## Integration
+
+### CI/CD Integration
+
+```bash ci.sh
+#!/bin/bash
+set -e
+
+# Run analyzer with strict settings
+dart analyze --fatal-infos --fatal-warnings
+
+if [ $? -eq 0 ]; then
+  echo "Analysis passed!"
+else
+  echo "Analysis failed!"
+  exit 1
+fi
+```
+
+### Pre-commit Hook
+
+```bash .git/hooks/pre-commit
+#!/bin/bash
+
+# Analyze staged Dart files
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep "\.dart$")
+
+if [ -n "$STAGED_FILES" ]; then
+  dart analyze $STAGED_FILES
+  if [ $? -ne 0 ]; then
+    echo "Analysis failed. Please fix the issues before committing."
+    exit 1
+  fi
+fi
+```
+
+### Editor Integration
+
+Most editors integrate with the Dart analyzer through the Dart Analysis Server:
+
+- **VS Code**: Install the Dart extension
+- **IntelliJ/Android Studio**: Built-in Dart plugin
+- **Vim/Neovim**: Use vim-lsc or coc-flutter
+- **Emacs**: Use lsp-mode with lsp-dart
+
+## Common Diagnostic Codes
+
+### Compile-Time Errors
+
+- `undefined_name` - Reference to undefined identifier
+- `undefined_method` - Call to undefined method
+- `invalid_assignment` - Type mismatch in assignment
+- `argument_type_not_assignable` - Wrong argument type
+
+### Warnings
+
+- `unused_import` - Import statement is unused
+- `unused_local_variable` - Local variable is never read
+- `dead_code` - Unreachable code detected
+- `deprecated_member_use` - Use of deprecated API
+
+### Hints/Info
+
+- `unnecessary_cast` - Explicit cast is redundant
+- `unnecessary_null_comparison` - Null check is unnecessary
+- `prefer_const_constructors` - Constructor could be const
+
+## Performance Tuning
+
+### Cache Location
+
+Set a custom cache directory to improve performance:
+
+```bash
+dart analyze --cache=/tmp/dart-analysis-cache
+```
+
+### Incremental Analysis
+
+The analyzer uses incremental analysis by default, only re-analyzing changed files.
+
+## Troubleshooting
+
+### Clear Analysis Cache
+
+If you encounter issues, try clearing the analysis cache:
+
+```bash
+rm -rf .dart_tool/
+dart pub get
+dart analyze
+```
+
+### Verbose Output
+
+Enable verbose output for debugging:
+
+```bash
+dart analyze --verbose
+```
+
+## See Also
+
+- [Linter Rules](https://dart.dev/tools/linter-rules) - Complete list of available linter rules
+- [Diagnostic Messages](https://dart.dev/tools/diagnostic-messages) - All diagnostic codes and messages
+- [analysis_options.yaml](https://dart.dev/guides/language/analysis-options) - Configuration file reference

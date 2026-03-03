@@ -1,0 +1,383 @@
+---
+title: Building from Source
+description: Step-by-step guide to building the Dart SDK from source
+---
+
+This guide walks you through the complete process of building the Dart SDK from source code.
+
+<Note>
+Before you begin, make sure you've installed all required [dependencies](/building/dependencies).
+</Note>
+
+## Getting the Source
+
+<Warning>
+You must use `fetch dart` to get the source. Just cloning the GitHub repository or downloading a ZIP file will not work because the build requires additional dependencies managed by `gclient`.
+</Warning>
+
+### For Googlers Only
+
+<Info>
+Googlers: Add this to your `~/.gitconfig` file **before** running `fetch dart`:
+
+```gitconfig
+# Googlers need this in ~/.gitconfig or the checkout won't work correctly.
+[url "sso://dart/"]
+    insteadOf = https://dart.googlesource.com/
+    insteadOf = https://dart-review.googlesource.com/
+    insteadOf = http://dart.googlesource.com/
+    insteadOf = http://dart-review.googlesource.com/
+```
+</Info>
+
+### Fetch the Source
+
+<Steps>
+  <Step title="Create a directory for the SDK">
+    You can use any directory name. This example uses `dart-sdk`:
+
+    ```bash
+    mkdir dart-sdk
+    cd dart-sdk
+    ```
+  </Step>
+
+  <Step title="Fetch the Dart source tree">
+    <Tabs>
+      <Tab title="Linux/macOS">
+        ```bash
+        fetch dart
+        ```
+      </Tab>
+      <Tab title="Windows">
+        <Warning>
+        On Windows, this command needs to be run in a shell with Administrator rights.
+        </Warning>
+
+        ```bash
+        fetch dart
+        ```
+      </Tab>
+    </Tabs>
+
+    This downloads the SDK repository and all its dependencies. It may take several minutes.
+  </Step>
+
+  <Step title="Navigate to the SDK directory">
+    ```bash
+    cd sdk
+    ```
+
+    All build commands should be run from within the `sdk` directory.
+  </Step>
+</Steps>
+
+### Syncing Dependencies
+
+The Dart SDK uses `gclient` to manage dependencies described in the `DEPS` file.
+
+<Note>
+When you switch branches or update your SDK checkout, run `gclient sync` to bring dependencies in sync with the SDK version:
+
+```bash
+gclient sync
+```
+</Note>
+
+## Building the SDK
+
+<Steps>
+  <Step title="Navigate to the SDK directory">
+    Make sure you're in the `sdk` directory:
+
+    ```bash
+    cd sdk
+    ```
+  </Step>
+
+  <Step title="Run the build script">
+    Build the SDK in release mode:
+
+    <CodeGroup>
+      ```bash Linux/macOS
+      ./tools/build.py --mode release create_sdk
+      ```
+
+      ```bash Windows
+      python tools/build.py --mode release create_sdk
+      ```
+    </CodeGroup>
+
+    The build process may take 10-30 minutes depending on your system.
+  </Step>
+
+  <Step title="Locate the built SDK">
+    After the build completes, find the SDK at:
+
+    - **Linux**: `out/ReleaseX64/dart-sdk`
+    - **Windows**: `out/ReleaseX64/dart-sdk`
+    - **macOS**: `xcodebuild/ReleaseARM64/dart-sdk`
+  </Step>
+</Steps>
+
+## Build Options
+
+### Build Modes
+
+The `--mode` (or `-m`) flag controls the optimization level:
+
+<CodeGroup>
+  ```bash Debug Mode
+  ./tools/build.py --mode debug create_sdk
+  ```
+
+  ```bash Release Mode
+  ./tools/build.py --mode release create_sdk
+  ```
+
+  ```bash Both Modes
+  ./tools/build.py --mode all create_sdk
+  ```
+</CodeGroup>
+
+- **debug**: Includes debug symbols, no optimization (faster builds, slower runtime)
+- **release**: Optimized build (slower builds, faster runtime)
+- **all**: Builds both debug and release
+
+### Target Architecture
+
+The `--arch` (or `-a`) flag specifies the target architecture:
+
+<CodeGroup>
+  ```bash x64 (Default)
+  ./tools/build.py --arch x64 create_sdk
+  ```
+
+  ```bash ARM
+  ./tools/build.py --arch arm create_sdk
+  ```
+
+  ```bash ARM64
+  ./tools/build.py --arch arm64 create_sdk
+  ```
+
+  ```bash RISC-V 64
+  ./tools/build.py --arch riscv64 create_sdk
+  ```
+</CodeGroup>
+
+Supported architectures: `x64`, `arm`, `arm64`, `riscv64`
+
+### Build Targets
+
+#### Full SDK (Recommended)
+
+```bash
+./tools/build.py --mode release create_sdk
+```
+
+Builds the complete Dart SDK with all tools and libraries.
+
+#### Runtime Only
+
+```bash
+./tools/build.py --mode release runtime
+```
+
+Builds only the Dart VM runtime without SDK tools. This is faster but provides a limited development environment.
+
+#### Most Targets
+
+```bash
+./tools/build.py --mode release most run_ffi_unit_tests
+```
+
+Builds most targets needed for comprehensive testing.
+
+## Testing Your Build
+
+<Steps>
+  <Step title="Build test targets">
+    First, build the targets needed for testing:
+
+    ```bash
+    ./tools/build.py --mode release most run_ffi_unit_tests
+    ```
+  </Step>
+
+  <Step title="Run the test suite">
+    Run tests with the built SDK:
+
+    <CodeGroup>
+      ```bash VM Tests
+      ./tools/test.py -mrelease --runtime=vm corelib
+      ```
+
+      ```bash All Tests (requires browsers)
+      ./tools/test.py -mrelease --compiler=dartk,dart2js --runtime=vm,d8,chrome,firefox
+      ```
+
+      ```bash Specific Test
+      ./tools/test.py -mrelease --runtime=vm corelib/ListTest
+      ```
+    </CodeGroup>
+  </Step>
+</Steps>
+
+### Test Options
+
+The test script supports various options:
+
+```bash
+./tools/test.py \
+  --runtime vm \
+  --progress color \
+  --arch x64 \
+  --mode release \
+  --time \
+  --tasks 6 \
+  language
+```
+
+- `--runtime`: Where to run tests (`vm`, `d8`, `chrome`, `firefox`, etc.)
+- `--compiler`: Compiler to use (`dartk`, `dart2js`, `dart2analyzer`)
+- `--progress`: Progress display style
+- `--arch`: Target architecture
+- `--mode`: Build mode to test
+- `--time`: Show timing information
+- `--tasks`: Number of parallel test tasks
+
+<Warning>
+Make sure to run tests using the same mode and architecture as your build.
+</Warning>
+
+## Build Performance Tips
+
+### Use a Local File System
+
+For faster builds, use a local file system for the output directory, especially if your source code is on NFS:
+
+```bash
+cd sdk/
+mkdir -p /usr/local/dart-out/
+ln -s -f /usr/local/dart-out/ out
+```
+
+### Build Notifications
+
+Get notified when long builds complete (macOS and Linux only):
+
+```bash
+export DART_BUILD_NOTIFICATION_DELAY=60  # Notify if build takes >60 seconds
+```
+
+Set this in your shell's rc file to make it permanent.
+
+### Parallel Builds
+
+The build system automatically uses available CPU cores. For testing, control parallelism with `--tasks`:
+
+```bash
+./tools/test.py --tasks 8 -mrelease --runtime=vm language
+```
+
+## Troubleshooting
+
+### Build Fails Immediately
+
+<AccordionGroup>
+  <Accordion title="Python version issues">
+    Ensure Python 3 is installed and in your PATH:
+
+    ```bash
+    python3 --version
+    ```
+
+    On Windows, make sure `depot_tools/python.bat` is first in your PATH.
+  </Accordion>
+
+  <Accordion title="Missing depot_tools">
+    Verify depot_tools is in your PATH:
+
+    ```bash
+    which gclient  # Linux/macOS
+    where gclient  # Windows
+    ```
+
+    If not found, add depot_tools to your PATH.
+  </Accordion>
+
+  <Accordion title="Dependencies out of sync">
+    Run `gclient sync` to update all dependencies:
+
+    ```bash
+    gclient sync
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Visual Studio Issues (Windows)
+
+<AccordionGroup>
+  <Accordion title="Wrong toolchain selected">
+    For non-Googlers, set the environment variable:
+
+    ```bash
+    set DEPOT_TOOLS_WIN_TOOLCHAIN=0
+    ```
+  </Accordion>
+
+  <Accordion title="Visual Studio version not detected">
+    Manually specify the Visual Studio version:
+
+    ```bash
+    set gyp_msvs_version=2015
+    gclient runhooks
+    ```
+  </Accordion>
+
+  <Accordion title="Custom executable name (Community Edition)">
+    Specify the executable name:
+
+    ```bash
+    python tools/build.py --executable=VSExpress.exe create_sdk
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Browser Test Issues
+
+<AccordionGroup>
+  <Accordion title="Missing fonts (Linux)">
+    Install required fonts for DumpRenderTree:
+
+    See [LayoutTestsLinux](http://code.google.com/p/chromium/wiki/LayoutTestsLinux) for font installation instructions.
+  </Accordion>
+
+  <Accordion title="No display available">
+    Use `xvfb` to provide a virtual display:
+
+    ```bash
+    xvfb-run ./tools/test.py --compiler=dart2js --runtime=drt
+    ```
+
+    Or use SSH X tunneling, NX, or VNC.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="ARM/RISC-V Builds" icon="microchip" href="/building/for-arm-risc-v">
+    Build for ARM and RISC-V architectures
+  </Card>
+  <Card title="Android Builds" icon="mobile" href="/building/for-android">
+    Build the Dart VM for Android devices
+  </Card>
+  <Card title="Fuchsia Builds" icon="layer-group" href="/building/for-fuchsia">
+    Build the Dart VM for Fuchsia OS
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/contributing">
+    Learn how to contribute to the Dart SDK
+  </Card>
+</CardGroup>

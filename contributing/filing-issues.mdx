@@ -1,0 +1,243 @@
+---
+title: Filing Dart Issues
+description: How to file effective bug reports and feature requests for Dart
+---
+
+Dart is developed across multiple GitHub repositories. To ensure your issue gets to the right team quickly, file it in the appropriate repository based on the component you're working with.
+
+## Issue Trackers by Component
+
+Use the correct repository for your issue:
+
+| Component | Issue Tracker |
+|-----------|---------------|
+| SDK core (language, VM, dart2js, Analyzer, Debugger/Observatory) | [dart-lang/sdk](https://github.com/dart-lang/sdk/issues) |
+| DartPad editor | [dart-lang/dart-pad](https://github.com/dart-lang/dart-pad/issues) |
+| Pub tool | [dart-lang/pub](https://github.com/dart-lang/pub/issues) |
+| dartfmt tool | [dart-lang/dart_style](https://github.com/dart-lang/dart_style/issues) |
+| Dartdoc tool | [dart-lang/dartdoc](https://github.com/dart-lang/dartdoc/issues) |
+| test library | [dart-lang/test](https://github.com/dart-lang/test/issues) |
+| AngularDart | [dart-lang/angular](https://github.com/dart-lang/angular/issues) |
+| www.dartlang.org website | [dart-lang/site-www](https://github.com/dart-lang/site-www/issues) |
+
+<Info>
+If you're unsure which repository to use, start with [dart-lang/sdk](https://github.com/dart-lang/sdk/issues). The team will transfer it to the correct repository if needed.
+</Info>
+
+## Writing Effective Issue Reports
+
+A well-written issue report helps the team understand, reproduce, and fix problems faster.
+
+### For Bug Reports
+
+Include the following information:
+
+<Steps>
+  <Step title="Clear title">
+    Write a concise summary that describes the problem.
+    
+    **Good**: "dart2js crashes when compiling async generator with type parameter"
+    
+    **Poor**: "Compiler broken"
+  </Step>
+  
+  <Step title="Environment details">
+    Specify:
+    - Dart SDK version (`dart --version`)
+    - Operating system and version
+    - Affected platforms (VM, web, Flutter, etc.)
+  </Step>
+  
+  <Step title="Minimal reproduction">
+    Provide the smallest code example that demonstrates the issue:
+    
+    ```dart
+    void main() {
+      // Minimal code that reproduces the bug
+    }
+    ```
+    
+    <Info>
+    The easier it is to reproduce, the faster it will be fixed.
+    </Info>
+  </Step>
+  
+  <Step title="Expected vs actual behavior">
+    Clearly state:
+    - What you expected to happen
+    - What actually happened
+    - Any error messages or stack traces
+  </Step>
+  
+  <Step title="Steps to reproduce">
+    List the exact steps to trigger the issue:
+    
+    1. Create a file with the code above
+    2. Run `dart compile js file.dart`
+    3. Observe the crash
+  </Step>
+</Steps>
+
+### For Feature Requests
+
+<Steps>
+  <Step title="Use case description">
+    Explain the problem you're trying to solve and why current solutions are inadequate.
+  </Step>
+  
+  <Step title="Proposed solution">
+    Describe what you'd like to see added or changed.
+  </Step>
+  
+  <Step title="Alternatives considered">
+    Mention any workarounds or alternative approaches you've tried.
+  </Step>
+  
+  <Step title="Impact assessment">
+    Explain who would benefit and how common the use case is.
+  </Step>
+</Steps>
+
+## Issue Templates
+
+### Bug Report Template
+
+```markdown
+## Summary
+Brief description of the issue
+
+## Environment
+- Dart SDK version: [output of `dart --version`]
+- Operating System: [e.g., macOS 13.0, Ubuntu 22.04, Windows 11]
+- Platform: [VM/web/Flutter]
+
+## Steps to Reproduce
+1. First step
+2. Second step
+3. ...
+
+## Code Sample
+```dart
+// Minimal reproducible code
+```
+
+## Expected Behavior
+What should happen
+
+## Actual Behavior
+What actually happens
+
+## Error Messages
+```
+Stack traces or error output
+```
+
+## Additional Context
+Any other relevant information
+```
+
+### Feature Request Template
+
+```markdown
+## Use Case
+Describe the problem this feature would solve
+
+## Proposal
+Describe the desired feature or change
+
+## Example Usage
+```dart
+// How the feature would be used
+```
+
+## Alternatives
+Workarounds or alternative approaches considered
+
+## Impact
+Who would benefit and how common is this use case
+```
+
+## After Filing an Issue
+
+### What Happens Next
+
+<Steps>
+  <Step title="Automatic labeling">
+    A bot may automatically add initial labels based on issue content.
+  </Step>
+  
+  <Step title="Triage">
+    The team will review and add appropriate labels:
+    - `area-*`: Which team owns the issue
+    - `type-*`: Bug, enhancement, documentation, etc.
+    - `P0-P3`: Priority level
+    
+    See [Triaging Process](/contributing/triaging) for details.
+  </Step>
+  
+  <Step title="Transfer if needed">
+    If filed in the wrong repository, the team will transfer it to the correct one.
+  </Step>
+  
+  <Step title="Needs-info requests">
+    The team may add the `needs-info` label and ask for clarification.
+    
+    <Warning>
+    Issues with `needs-info` that don't receive a response within 14 days will be automatically closed.
+    </Warning>
+  </Step>
+</Steps>
+
+### Responding to Questions
+
+When the team requests more information:
+
+- Respond promptly to keep the issue active
+- Provide the specific details requested
+- Add any new information that might be relevant
+- Test any proposed fixes or workarounds
+
+### Following Up
+
+- Subscribe to the issue to receive updates
+- Add new information if the issue changes or worsens
+- Test fixes when they're available
+- Close the issue if you find your own solution (explain how you fixed it)
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Search first" icon="magnifying-glass">
+    Check if someone has already reported the issue to avoid duplicates.
+  </Card>
+  
+  <Card title="One issue per report" icon="1">
+    File separate issues for different bugs or features, even if they seem related.
+  </Card>
+  
+  <Card title="Stay focused" icon="bullseye">
+    Keep issues focused on a single problem or request.
+  </Card>
+  
+  <Card title="Be respectful" icon="handshake">
+    Remember that maintainers are people too. Courtesy goes a long way.
+  </Card>
+</CardGroup>
+
+## Common Mistakes to Avoid
+
+- **Vague descriptions**: "It doesn't work" doesn't help identify the problem
+- **Missing version info**: Different versions have different bugs
+- **Large code dumps**: Minimize the example to the essential parts
+- **Multiple issues in one**: Each issue should track one problem
+- **No reproduction steps**: Make it easy for others to see the problem
+
+## Questions vs Issues
+
+If you have a question rather than a bug report or feature request:
+
+- Use [Stack Overflow](https://stackoverflow.com/questions/tagged/dart) with the `dart` tag
+- Join the [Dart Discord](https://discord.gg/Qt6DgfAWWx)
+- Check the [Dart documentation](https://dart.dev/)
+
+Save GitHub issues for actionable bugs and concrete feature requests.
